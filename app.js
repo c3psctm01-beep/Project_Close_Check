@@ -74,12 +74,11 @@ const memoTextarea = document.getElementById("memoTextarea");
 const tabButtons = document.querySelectorAll(".tab-btn");
 const tabContents = document.querySelectorAll(".tab-content");
 
-// --------------------------------------------------------------------------
-// Initialization
-// --------------------------------------------------------------------------
 document.addEventListener("DOMContentLoaded", () => {
   initEventListeners();
   loadProjectsFromServer();
+  const heroSection = document.getElementById("projectDetailHeroSection");
+  if (heroSection) heroSection.style.display = "none";
 });
 
 function initEventListeners() {
@@ -257,8 +256,18 @@ function switchTab(tabId) {
     }
   });
 
+  // Toggle project detail hero section visibility
+  const heroSection = document.getElementById("projectDetailHeroSection");
+  if (heroSection) {
+    if (tabId === "tab-projects") {
+      heroSection.style.display = "none";
+    } else {
+      heroSection.style.display = "block";
+    }
+  }
+
   if (tabId === "tab-projects") {
-    renderProjectsDirectory();
+    renderProjectsCardsAndDirectory();
   }
 }
 
@@ -295,6 +304,7 @@ async function loadProjectsFromServer() {
     allProjects = cached;
     populateProjectSelect();
     setCurrentProject(allProjects[0]);
+    renderProjectsCardsAndDirectory();
     return;
   }
 
@@ -307,14 +317,17 @@ async function loadProjectsFromServer() {
         saveProjectsToCache(allProjects);
         populateProjectSelect();
         setCurrentProject(allProjects[0]);
+        renderProjectsCardsAndDirectory();
         return;
       }
     }
     console.warn("Could not fetch projects from server, trying sample project...");
     await loadSampleProject();
+    renderProjectsCardsAndDirectory();
   } catch (err) {
     console.warn("Server unavailable or offline mode, attempting fallback...", err);
     await loadSampleProject();
+    renderProjectsCardsAndDirectory();
   }
 }
 
@@ -1917,56 +1930,265 @@ function renderEmptyProjectState() {
   renderProjectsDirectory();
 }
 
-function renderProjectsDirectory() {
-  const tbody = document.getElementById("projectsDirectoryTableBody");
-  tbody.innerHTML = "";
+// --------------------------------------------------------------------------
+// Projects Hub, Cards Grid & Directory Management
+// --------------------------------------------------------------------------
+let projectsViewMode = "cards";
 
-  if (allProjects.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="8" class="text-center py-4 text-muted">ยังไม่มีโครงการในระบบ (สามารถคลิกปุ่ม "เพิ่มโครงการใหม่" เพื่ออัปโหลดไฟล์ SAP ZPSR018)</td></tr>`;
-    return;
+function setProjectsViewMode(mode) {
+  projectsViewMode = mode;
+  const btnCards = document.getElementById("btnViewCards");
+  const btnTable = document.getElementById("btnViewTable");
+  const cardsContainer = document.getElementById("projectsCardsContainer");
+  const tableContainer = document.getElementById("projectsTableContainer");
+
+  if (mode === "cards") {
+    if (btnCards) btnCards.className = "btn btn-xs btn-purple active";
+    if (btnTable) btnTable.className = "btn btn-xs btn-outline-purple";
+    if (cardsContainer) cardsContainer.style.display = "grid";
+    if (tableContainer) tableContainer.style.display = "none";
+  } else {
+    if (btnCards) btnCards.className = "btn btn-xs btn-outline-purple";
+    if (btnTable) btnTable.className = "btn btn-xs btn-purple active";
+    if (cardsContainer) cardsContainer.style.display = "none";
+    if (tableContainer) tableContainer.style.display = "block";
   }
+}
+
+function filterAndRenderProjectsCards() {
+  renderProjectsCardsAndDirectory();
+}
+
+function renderProjectsCardsAndDirectory() {
+  const cardsContainer = document.getElementById("projectsCardsContainer");
+  const tbody = document.getElementById("projectsDirectoryTableBody");
+  const searchInput = document.getElementById("hubSearchInput");
+  const statusFilter = document.getElementById("hubStatusFilter");
+
+  const query = searchInput ? searchInput.value.trim().toLowerCase() : "";
+  const filterVal = statusFilter ? statusFilter.value : "ALL";
+
+  // 1. Calculate Hub Aggregate Stats
+  let totalCount = allProjects.length;
+  let readyCount = 0;
+  let deficitCount = 0;
+  let totalMissing = 0;
 
   allProjects.forEach(p => {
     const isDef = p.budget_summary && p.budget_summary.is_deficit;
-    const defSum = p.budget_summary ? p.budget_summary.total_deficit : 0;
-    const withCount = p.materials_summary ? p.materials_summary.need_withdraw_count : 0;
-    const isCurrent = currentProject && (currentProject.id === p.id || currentProject.wbs === p.wbs);
+    if (isDef) deficitCount++;
+    else readyCount++;
 
-    const tr = document.createElement("tr");
-    if (isCurrent) tr.style.backgroundColor = "rgba(123, 31, 162, 0.05)";
-
-    tr.innerHTML = `
-      <td><code>${p.wbs || p.id}</code></td>
-      <td><strong>${p.name}</strong> ${isCurrent ? '<span class="pea-badge badge-purple ml-1">กำลังดู</span>' : ''}</td>
-      <td>${p.officer || "-"}</td>
-      <td><span class="pea-badge badge-wbs"><i class="fa-solid fa-calendar-check text-gold"></i> ${p.target_month || "ไม่ระบุ"}</span></td>
-      <td class="text-right ${isDef ? 'text-danger font-weight-bold' : 'text-success'}">${isDef ? `-${formatMoney(defSum)} ฿` : '0.00 ฿'}</td>
-      <td class="text-center">${withCount} รายการ</td>
-      <td class="text-center">
-        <span class="check-badge ${isDef ? 'bg-danger' : 'bg-success'}">
-          ${isDef ? 'ปิดงานไม่ได้' : 'พร้อมปิดงาน'}
-        </span>
-      </td>
-      <td class="text-center">
-        <div style="display: inline-flex; gap: 0.35rem; align-items: center; justify-content: center;">
-          <button class="btn btn-xs btn-purple" onclick="selectProjectById('${p.id}')" title="เปิดดูโครงการนี้">
-            <i class="fa-solid fa-eye"></i> เปิดดู
-          </button>
-          <button class="btn btn-xs btn-outline-danger" onclick="promptDeleteProject('${p.id}', '${escapeAttr(p.name)}', '${p.wbs || p.id}')" title="ลบโครงการออกจากทะเบียน">
-            <i class="fa-solid fa-trash-can"></i> ลบ
-          </button>
-        </div>
-      </td>
-    `;
-    tbody.appendChild(tr);
+    const withCount = (p.materials_summary && p.materials_summary.need_withdraw_count) || 0;
+    if (withCount > 0) totalMissing++;
   });
+
+  const elTotal = document.getElementById("hubTotalCount");
+  const elReady = document.getElementById("hubReadyCount");
+  const elDeficit = document.getElementById("hubDeficitCount");
+  const elMissing = document.getElementById("hubMissingCount");
+  const elBadge = document.getElementById("hubProjectsBadge");
+
+  if (elTotal) elTotal.textContent = totalCount;
+  if (elReady) elReady.textContent = readyCount;
+  if (elDeficit) elDeficit.textContent = deficitCount;
+  if (elMissing) elMissing.textContent = totalMissing;
+  if (elBadge) elBadge.textContent = totalCount;
+
+  // 2. Filter Projects
+  let filtered = allProjects;
+  if (filterVal === "READY") {
+    filtered = filtered.filter(p => !p.budget_summary || !p.budget_summary.is_deficit);
+  } else if (filterVal === "DEFICIT") {
+    filtered = filtered.filter(p => p.budget_summary && p.budget_summary.is_deficit);
+  } else if (filterVal === "WITHDRAW") {
+    filtered = filtered.filter(p => p.materials_summary && p.materials_summary.need_withdraw_count > 0);
+  }
+
+  if (query) {
+    filtered = filtered.filter(p => {
+      const wbs = (p.wbs || p.id || "").toLowerCase();
+      const name = (p.name || "").toLowerCase();
+      const officer = (p.officer || "").toLowerCase();
+      return wbs.includes(query) || name.includes(query) || officer.includes(query);
+    });
+  }
+
+  // 3. Render Cards Grid
+  if (cardsContainer) {
+    cardsContainer.innerHTML = "";
+
+    if (filtered.length === 0) {
+      if (allProjects.length === 0) {
+        cardsContainer.innerHTML = `
+          <div class="project-card project-card-add" onclick="openUploadModal()" style="grid-column: 1 / -1; min-height: 240px;">
+            <div class="add-card-inner">
+              <div class="add-icon"><i class="fa-solid fa-cloud-arrow-up"></i></div>
+              <h4>ยังไม่มีโครงการในระบบ</h4>
+              <p>คลิกที่นี่เพื่ออัปโหลดรายงานปิดงาน SAP ZPSR018 / ZBUDR018 (.pdf)</p>
+            </div>
+          </div>
+        `;
+      } else {
+        cardsContainer.innerHTML = `
+          <div style="grid-column: 1 / -1; text-align: center; padding: 3rem 1rem; color: #64748b;">
+            <i class="fa-solid fa-magnifying-glass" style="font-size: 2rem; margin-bottom: 0.75rem; opacity: 0.5;"></i>
+            <h4>ไม่พบโครงการที่ตรงกับเงื่อนไขการค้นหา</h4>
+            <p>ลองเปลี่ยนคำค้นหา หรือเลือก "สถานะทั้งหมด"</p>
+          </div>
+        `;
+      }
+    } else {
+      filtered.forEach(p => {
+        const isDef = p.budget_summary && p.budget_summary.is_deficit;
+        const defSum = p.budget_summary ? (p.budget_summary.total_deficit || 0) : 0;
+        const withCount = p.materials_summary ? (p.materials_summary.need_withdraw_count || 0) : 0;
+        const retCount = p.materials_summary ? (p.materials_summary.need_return_count || 0) : 0;
+        const isCurrent = currentProject && (currentProject.id === p.id || currentProject.wbs === p.wbs);
+
+        // Calculate readiness score
+        let readiness = 100;
+        if (isDef) readiness -= 40;
+        if (retCount > 0) readiness -= 20;
+        if (withCount > 0) readiness -= 15;
+        if (readiness < 0) readiness = 0;
+
+        let fillClass = "fill-success";
+        let scoreColor = "text-success";
+        if (readiness < 50) {
+          fillClass = "fill-danger";
+          scoreColor = "text-danger";
+        } else if (readiness < 90) {
+          fillClass = "fill-warning";
+          scoreColor = "text-warning";
+        }
+
+        const card = document.createElement("div");
+        card.className = `project-card ${isDef ? 'card-deficit' : 'card-ready'} ${isCurrent ? 'card-current' : ''}`;
+        card.innerHTML = `
+          <div>
+            <div class="project-card-header">
+              <span class="project-card-wbs"><i class="fa-solid fa-hashtag"></i> ${p.wbs || p.id}</span>
+              <span class="badge-status-pill ${isDef ? 'bg-danger' : 'bg-success'}">
+                <i class="fa-solid ${isDef ? 'fa-ban' : 'fa-circle-check'}"></i> ${isDef ? 'ปิดงานไม่ได้' : 'พร้อมปิดงาน'}
+              </span>
+            </div>
+
+            <h4 class="project-card-title" title="${escapeAttr(p.name)}">${p.name}</h4>
+
+            <div class="project-card-meta">
+              <span><i class="fa-solid fa-user-gear"></i> ${p.officer || '-'} (รหัส ${p.officer_id || '-'})</span>
+              <span><i class="fa-solid fa-calendar-check text-gold"></i> แผนปิดงาน: <strong>${p.target_month || 'ไม่ระบุ'}</strong></span>
+            </div>
+
+            <!-- Readiness Bar -->
+            <div class="project-card-readiness">
+              <div class="readiness-bar-row">
+                <span>ความพร้อมปิดงาน</span>
+                <span class="${scoreColor} font-weight-bold">${readiness}%</span>
+              </div>
+              <div class="readiness-track">
+                <div class="readiness-fill ${fillClass}" style="width: ${readiness}%;"></div>
+              </div>
+            </div>
+
+            <!-- Metric Chips (สถานะบางส่วน) -->
+            <div class="project-card-chips">
+              <div class="metric-chip ${isDef ? 'chip-danger' : 'chip-success'}">
+                <span class="chip-label">งบหน้างาน</span>
+                <span class="chip-val">${isDef ? '-' + formatMoney(defSum) + ' ฿' : 'ปกติ (0 ฿)'}</span>
+              </div>
+              <div class="metric-chip ${withCount > 0 ? 'chip-warning' : 'chip-neutral'}">
+                <span class="chip-label">พัสดุขาดเบิก</span>
+                <span class="chip-val">${withCount} รายการ</span>
+              </div>
+              <div class="metric-chip ${retCount > 0 ? 'chip-warning' : 'chip-neutral'} chip-full">
+                <span class="chip-label">พัสดุค้างส่งคืน</span>
+                <span class="chip-val">${retCount > 0 ? 'ค้างส่งคืน ' + retCount + ' รายการ' : '✓ ไม่มีค้างส่งคืน'}</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Actions -->
+          <div class="project-card-actions">
+            <button class="btn btn-purple btn-open-detail" onclick="selectProjectById('${p.id}')">
+              <i class="fa-solid fa-chart-pie"></i> เปิดดูรายละเอียดโครงการ
+            </button>
+            <button class="btn btn-outline-danger btn-sm" onclick="promptDeleteProject('${p.id}', '${escapeAttr(p.name)}', '${p.wbs || p.id}')" title="ลบโครงการ">
+              <i class="fa-solid fa-trash-can"></i>
+            </button>
+          </div>
+        `;
+        cardsContainer.appendChild(card);
+      });
+
+      // Add "Add New Project" Card at the end of grid
+      const addCard = document.createElement("div");
+      addCard.className = "project-card project-card-add";
+      addCard.onclick = openUploadModal;
+      addCard.innerHTML = `
+        <div class="add-card-inner">
+          <div class="add-icon"><i class="fa-solid fa-plus"></i></div>
+          <h4>เพิ่มโครงการใหม่</h4>
+          <p>อัปโหลดรายงาน SAP ZPSR018 (.pdf)</p>
+        </div>
+      `;
+      cardsContainer.appendChild(addCard);
+    }
+  }
+
+  // 4. Render Table View (Directory)
+  if (tbody) {
+    tbody.innerHTML = "";
+    if (filtered.length === 0) {
+      tbody.innerHTML = `<tr><td colspan="8" class="text-center py-4 text-muted">ไม่พบข้อมูลโครงการที่ตรงกับเงื่อนไขการค้นหา</td></tr>`;
+    } else {
+      filtered.forEach(p => {
+        const isDef = p.budget_summary && p.budget_summary.is_deficit;
+        const defSum = p.budget_summary ? (p.budget_summary.total_deficit || 0) : 0;
+        const withCount = p.materials_summary ? (p.materials_summary.need_withdraw_count || 0) : 0;
+        const isCurrent = currentProject && (currentProject.id === p.id || currentProject.wbs === p.wbs);
+
+        const tr = document.createElement("tr");
+        if (isCurrent) tr.style.backgroundColor = "rgba(123, 31, 162, 0.05)";
+
+        tr.innerHTML = `
+          <td><code>${p.wbs || p.id}</code></td>
+          <td><strong>${p.name}</strong> ${isCurrent ? '<span class="pea-badge badge-purple ml-1">กำลังดู</span>' : ''}</td>
+          <td>${p.officer || "-"}</td>
+          <td><span class="pea-badge badge-wbs"><i class="fa-solid fa-calendar-check text-gold"></i> ${p.target_month || "ไม่ระบุ"}</span></td>
+          <td class="text-right ${isDef ? 'text-danger font-weight-bold' : 'text-success'}">${isDef ? `-${formatMoney(defSum)} ฿` : '0.00 ฿'}</td>
+          <td class="text-center">${withCount} รายการ</td>
+          <td class="text-center">
+            <span class="check-badge ${isDef ? 'bg-danger' : 'bg-success'}">
+              ${isDef ? 'ปิดงานไม่ได้' : 'พร้อมปิดงาน'}
+            </span>
+          </td>
+          <td class="text-center">
+            <div style="display: inline-flex; gap: 0.35rem; align-items: center; justify-content: center;">
+              <button class="btn btn-xs btn-purple" onclick="selectProjectById('${p.id}')" title="เปิดดูโครงการนี้">
+                <i class="fa-solid fa-eye"></i> เปิดดู
+              </button>
+              <button class="btn btn-xs btn-outline-danger" onclick="promptDeleteProject('${p.id}', '${escapeAttr(p.name)}', '${p.wbs || p.id}')" title="ลบโครงการออกจากทะเบียน">
+                <i class="fa-solid fa-trash-can"></i> ลบ
+              </button>
+            </div>
+          </td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+  }
 }
+
+const renderProjectsDirectory = renderProjectsCardsAndDirectory;
 
 function selectProjectById(id) {
   const match = allProjects.find(p => p.id === id || p.wbs === id);
   if (match) {
     setCurrentProject(match);
     switchTab("tab-overview");
+    window.scrollTo({ top: 0, behavior: "smooth" });
   }
 }
 

@@ -49,18 +49,22 @@
 
   <!-- Main Container -->
   <main class="main-container">
-    <!-- Project Banner & Info Header -->
-    <section class="project-hero-card">
-      <div class="hero-top">
-        <div class="project-title-group">
-          <div class="badge-row">
-            <span class="pea-badge badge-purple" id="templateBadge"><i class="fa-solid fa-file-invoice"></i> TEMPLATE SAP ZPSR018</span>
-            <span class="pea-badge badge-wbs" id="wbsBadge"><i class="fa-solid fa-hashtag"></i> WBS: <strong id="heroWbs">-</strong></span>
-            <span class="pea-badge badge-status" id="closingStatusBadge"><i class="fa-solid fa-circle-exclamation"></i> รอตรวจสอบ</span>
-            <button id="btnDeleteCurrentProject" class="btn btn-xs btn-outline-danger" title="ลบโครงการปัจจุบันออกจากทะเบียน" style="margin-left: auto;">
-              <i class="fa-solid fa-trash-can"></i> ลบโครงการนี้
-            </button>
-          </div>
+    <div id="projectDetailHeroSection" style="display: none;">
+      <!-- Project Banner & Info Header -->
+      <section class="project-hero-card">
+        <div class="hero-top">
+          <div class="project-title-group">
+            <div class="badge-row">
+              <button class="btn btn-xs btn-outline-purple" onclick="switchTab('tab-projects')" style="margin-right: 0.35rem;" title="กลับไปยังหน้ารวมโครงการทั้งหมด">
+                <i class="fa-solid fa-arrow-left"></i> หน้ารวมโครงการ
+              </button>
+              <span class="pea-badge badge-purple" id="templateBadge"><i class="fa-solid fa-file-invoice"></i> TEMPLATE SAP ZPSR018</span>
+              <span class="pea-badge badge-wbs" id="wbsBadge"><i class="fa-solid fa-hashtag"></i> WBS: <strong id="heroWbs">-</strong></span>
+              <span class="pea-badge badge-status" id="closingStatusBadge"><i class="fa-solid fa-circle-exclamation"></i> รอตรวจสอบ</span>
+              <button id="btnDeleteCurrentProject" class="btn btn-xs btn-outline-danger" title="ลบโครงการปัจจุบันออกจากทะเบียน" style="margin-left: auto;">
+                <i class="fa-solid fa-trash-can"></i> ลบโครงการนี้
+              </button>
+            </div>
           <h2 class="project-main-title" id="heroProjectName">กำลังโหลดข้อมูลโครงการ...</h2>
           <div class="project-meta-inline">
             <span><i class="fa-solid fa-user-gear"></i> ผู้ควบคุมงาน: <strong id="heroOfficer">-</strong></span>
@@ -175,30 +179,139 @@
         </div>
       </div>
     </section>
+  </div><!-- End #projectDetailHeroSection -->
 
     <!-- Navigation Tabs -->
     <div class="tabs-nav-container">
-      <button class="tab-btn active" data-tab="tab-overview">
-        <i class="fa-solid fa-chart-pie"></i> 1. ภาพรวมสถานะปิดงาน
+      <button class="tab-btn active" data-tab="tab-projects" id="tabBtnProjects">
+        <i class="fa-solid fa-grip"></i> 1. ทะเบียนโครงการ (หน้าแรก)
+        <span class="tab-badge badge-purple" id="hubProjectsBadge">0</span>
       </button>
-      <button class="tab-btn" data-tab="tab-budget">
-        <i class="fa-solid fa-money-bill-transfer"></i> 2. วิเคราะห์ค่าใช้จ่ายหน้างาน & โอนงบ
-        <span class="tab-badge badge-danger" id="budgetTabBadge">ติดลบ 1 หมวด</span>
+      <button class="tab-btn" data-tab="tab-overview" id="tabBtnOverview">
+        <i class="fa-solid fa-chart-pie"></i> 2. ภาพรวมสถานะปิดงาน
       </button>
-      <button class="tab-btn" data-tab="tab-materials">
-        <i class="fa-solid fa-boxes-stacked"></i> 3. วิเคราะห์อุปกรณ์ (ส่งคืน / เบิกออก)
-        <span class="tab-badge badge-warning" id="matTabBadge">81 ขาดเบิก</span>
+      <button class="tab-btn" data-tab="tab-budget" id="tabBtnBudget">
+        <i class="fa-solid fa-money-bill-transfer"></i> 3. วิเคราะห์ค่าใช้จ่ายหน้างาน & โอนงบ
+        <span class="tab-badge badge-danger" id="budgetTabBadge">ปกติ</span>
       </button>
-      <button class="tab-btn" data-tab="tab-all-materials">
-        <i class="fa-solid fa-table-list"></i> 4. ทะเบียนพัสดุทั้งหมด (176 รายการ)
+      <button class="tab-btn" data-tab="tab-materials" id="tabBtnMaterials">
+        <i class="fa-solid fa-boxes-stacked"></i> 4. วิเคราะห์อุปกรณ์ (ส่งคืน / เบิกออก)
+        <span class="tab-badge badge-warning" id="matTabBadge">0 ขาดเบิก</span>
       </button>
-      <button class="tab-btn" data-tab="tab-projects">
-        <i class="fa-solid fa-folder-tree"></i> 5. ทะเบียนโครงการทั้งหมด & แผนปิดงาน
+      <button class="tab-btn" data-tab="tab-all-materials" id="tabBtnAllMaterials">
+        <i class="fa-solid fa-table-list"></i> 5. ทะเบียนพัสดุทั้งหมด
       </button>
     </div>
 
-    <!-- Tab 1: Project Closing Overview -->
-    <section id="tab-overview" class="tab-content active">
+    <!-- Tab 1: Projects Hub & Cards (Front Page / Landing) -->
+    <section id="tab-projects" class="tab-content active">
+      <!-- Hub Header & Summary -->
+      <div class="projects-hub-banner">
+        <div class="hub-header-row">
+          <div>
+            <div class="pea-badge badge-purple mb-1">
+              <i class="fa-solid fa-layer-group"></i> หน้ารวมโครงการก่อสร้าง
+            </div>
+            <h2 class="hub-title">ระบบติดตามและตรวจสอบการปิดงานก่อสร้าง (SAP ZPSR018)</h2>
+            <p class="hub-subtitle">เลือกโครงการเพื่อตรวจสอบงบประมาณ แผนการโอนงบ และรายการพัสดุคงค้าง หรือกดอัปโหลดรายงาน SAP PDF เพื่อเพิ่มโครงการ</p>
+          </div>
+          <div class="hub-actions">
+            <button class="btn btn-gold" onclick="openUploadModal()">
+              <i class="fa-solid fa-cloud-arrow-up"></i> เพิ่มโครงการใหม่ (อัปโหลด PDF)
+            </button>
+          </div>
+        </div>
+
+        <!-- Quick Summary Stats Row -->
+        <div class="hub-stats-row">
+          <div class="hub-stat-card">
+            <div class="hub-stat-icon icon-purple"><i class="fa-solid fa-diagram-project"></i></div>
+            <div class="hub-stat-info">
+              <span class="stat-num" id="hubTotalCount">0</span>
+              <span class="stat-lbl">โครงการทั้งหมด</span>
+            </div>
+          </div>
+          <div class="hub-stat-card">
+            <div class="hub-stat-icon icon-success"><i class="fa-solid fa-circle-check"></i></div>
+            <div class="hub-stat-info">
+              <span class="stat-num text-success" id="hubReadyCount">0</span>
+              <span class="stat-lbl">พร้อมปิดงาน</span>
+            </div>
+          </div>
+          <div class="hub-stat-card">
+            <div class="hub-stat-icon icon-danger"><i class="fa-solid fa-ban"></i></div>
+            <div class="hub-stat-info">
+              <span class="stat-num text-danger" id="hubDeficitCount">0</span>
+              <span class="stat-lbl">ปิดงานไม่ได้ (งบติดลบ)</span>
+            </div>
+          </div>
+          <div class="hub-stat-card">
+            <div class="hub-stat-icon icon-warning"><i class="fa-solid fa-boxes-stacked"></i></div>
+            <div class="hub-stat-info">
+              <span class="stat-num text-warning" id="hubMissingCount">0</span>
+              <span class="stat-lbl">มีพัสดุขาดเบิก</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Controls & Filter Toolbar -->
+      <div class="hub-toolbar">
+        <div class="hub-search-box">
+          <i class="fa-solid fa-magnifying-glass"></i>
+          <input type="text" id="hubSearchInput" placeholder="ค้นหาตามรหัส WBS, ชื่อโครงการ, หรือผู้ควบคุมงาน...">
+        </div>
+        <div class="hub-filter-group">
+          <select id="hubStatusFilter" class="pea-select-sm">
+            <option value="ALL">สถานะทั้งหมด</option>
+            <option value="READY">พร้อมปิดงาน</option>
+            <option value="DEFICIT">ปิดงานไม่ได้ (งบติดลบ)</option>
+            <option value="WITHDRAW">มีพัสดุขาดเบิก</option>
+          </select>
+          <div class="view-toggle-btns">
+            <button id="btnViewCards" class="btn btn-xs btn-purple active" onclick="setProjectsViewMode('cards')" title="มุมมองการ์ด">
+              <i class="fa-solid fa-grip"></i> การ์ด
+            </button>
+            <button id="btnViewTable" class="btn btn-xs btn-outline-purple" onclick="setProjectsViewMode('table')" title="มุมมองตาราง">
+              <i class="fa-solid fa-table-list"></i> ตาราง
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- 1. Cards Grid View (Default) -->
+      <div id="projectsCardsContainer" class="project-cards-grid">
+        <!-- Rendered dynamically -->
+      </div>
+
+      <!-- 2. Table View (Toggled) -->
+      <div id="projectsTableContainer" class="pea-panel mt-3" style="display: none;">
+        <div class="panel-body p-0">
+          <div class="table-responsive">
+            <table class="pea-table table-hover" id="projectsDirectoryTable">
+              <thead>
+                <tr>
+                  <th>หมายเลข WBS</th>
+                  <th>ชื่อโครงการก่อสร้าง</th>
+                  <th>ผู้ควบคุมงาน</th>
+                  <th>แผนเดือนปิดงาน</th>
+                  <th>ยอดเงินติดลบ</th>
+                  <th>พัสดุขาดเบิก</th>
+                  <th>สถานะปิดงาน</th>
+                  <th>การจัดการ</th>
+                </tr>
+              </thead>
+              <tbody id="projectsDirectoryTableBody">
+                <!-- Dynamically populated -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Tab 2: Project Closing Overview (Detail View) -->
+    <section id="tab-overview" class="tab-content">
       <div class="grid-2-col">
         <!-- Checklist Panel -->
         <div class="pea-panel">
@@ -717,42 +830,6 @@
                 </tr>
               </thead>
               <tbody id="allMaterialsTableBody">
-                <!-- Dynamically populated -->
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </div>
-    </section>
-
-    <!-- Tab 5: Projects Directory & Schedule Management -->
-    <section id="tab-projects" class="tab-content">
-      <div class="pea-panel">
-        <div class="panel-header">
-          <div>
-            <h3><i class="fa-solid fa-folder-open text-purple"></i> ทะเบียนโครงการทั้งหมดและการติดตามแผนเดือนปิดงาน</h3>
-            <p class="subtitle">จัดเก็บและบริหารข้อมูลโครงการแต่ละโครงการอย่างเป็นระบบ พร้อมสถานะความพร้อมปิดงาน</p>
-          </div>
-          <button class="btn btn-sm btn-gold" onclick="openUploadModal()">
-            <i class="fa-solid fa-plus"></i> เพิ่มโครงการใหม่ (อัปโหลด PDF)
-          </button>
-        </div>
-        <div class="panel-body p-0">
-          <div class="table-responsive">
-            <table class="pea-table table-hover" id="projectsDirectoryTable">
-              <thead>
-                <tr>
-                  <th>หมายเลข WBS</th>
-                  <th>ชื่อโครงการก่อสร้าง</th>
-                  <th>ผู้ควบคุมงาน</th>
-                  <th>แผนเดือนปิดงาน</th>
-                  <th>ยอดเงินติดลบ</th>
-                  <th>พัสดุขาดเบิก</th>
-                  <th>สถานะปิดงาน</th>
-                  <th>การจัดการ</th>
-                </tr>
-              </thead>
-              <tbody id="projectsDirectoryTableBody">
                 <!-- Dynamically populated -->
               </tbody>
             </table>
