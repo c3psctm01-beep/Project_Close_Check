@@ -3,7 +3,6 @@ import os
 import urllib.parse
 import json
 
-# Add parent directory to sys.path so root modules (server, approval_form_docx) can be imported
 CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
 PARENT_DIR = os.path.dirname(CURRENT_DIR)
 PUBLIC_DIR = os.path.join(PARENT_DIR, "public")
@@ -22,7 +21,6 @@ class handler(server.SAPCloseHTTPHandler):
     """
 
     def list_directory(self, path):
-        # Disable directory listing completely to prevent displaying folder contents
         self.send_response(200)
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.end_headers()
@@ -32,16 +30,26 @@ class handler(server.SAPCloseHTTPHandler):
         }, ensure_ascii=False).encode("utf-8"))
         return None
 
-    def _get_target_path(self):
-        matched_path = self.headers.get("x-matched-path", "")
+    def _resolve_path_and_query(self):
         parsed = urllib.parse.urlparse(self.path)
-        path = parsed.path
+        qs = urllib.parse.parse_qs(parsed.query, keep_blank_values=True)
 
+        # Check if Vercel passed __path parameter from rewrites
+        if "__path" in qs:
+            raw_subpath = qs.pop("__path")[0]
+            clean_sub = raw_subpath.strip("/")
+            api_path = f"/api/{clean_sub}" if clean_sub else "/api"
+            new_query = urllib.parse.urlencode(qs, doseq=True)
+            return api_path, new_query
+
+        # Fallback to headers or path inspection
+        matched = self.headers.get("x-matched-path", "")
+        if matched and matched != "/api/index.py":
+            return matched, parsed.query
+
+        path = parsed.path
         if "/api/index.py" in path:
-            if matched_path:
-                path = matched_path
-            else:
-                path = path.replace("/api/index.py", "")
+            path = path.replace("/api/index.py", "").strip()
 
         return path, parsed.query
 
@@ -50,10 +58,10 @@ class handler(server.SAPCloseHTTPHandler):
         self.end_headers()
 
     def do_GET(self):
-        path, query = self._get_target_path()
+        api_path, query = self._resolve_path_and_query()
 
         # 1. API Root info
-        if path in ["/api", "/api/"]:
+        if api_path in ["/api", "/api/"]:
             self.send_response(200)
             self.send_header("Content-Type", "application/json; charset=utf-8")
             self.end_headers()
@@ -70,8 +78,8 @@ class handler(server.SAPCloseHTTPHandler):
             }, ensure_ascii=False).encode("utf-8"))
             return
 
-        # 2. If index.html or root is routed to this function, serve index.html directly
-        if path in ["", "/", "/index.html"]:
+        # 2. If index.html or root
+        if api_path in ["", "/", "/index.html"]:
             candidate_index = [
                 os.path.join(PUBLIC_DIR, "index.html"),
                 os.path.join(PARENT_DIR, "index.html")
@@ -87,23 +95,11 @@ class handler(server.SAPCloseHTTPHandler):
                     self.wfile.write(data)
                     return
 
-        # 3. If a static asset (.css, .js, etc.) is routed here, serve it directly
-        static_types = {
-            ".css": "text/css; charset=utf-8",
-            ".js": "application/javascript; charset=utf-8",
-            ".json": "application/json; charset=utf-8",
-            ".svg": "image/svg+xml",
-            ".png": "image/png",
-            ".ico": "image/x-icon"
-        }
-        for ext, ctype in static_types.items():
-            if path.endswith(ext):
-                fname = os.path.basename(path)
-                candidate_asset = [
-                    os.path.join(PUBLIC_DIR, fname),
-                    os.path.join(PARENT_DIR, fname)
-                ]
-                for a_path in candidate_asset:
+        # 3. Static assets fallback
+        for ext, ctype in [(".css", "text/css; charset=utf-8"), (".js", "application/javascript; charset=utf-8"), (".json", "application/json; charset=utf-8")]:
+            if api_path.endswith(ext):
+                fname = os.path.basename(api_path)
+                for a_path in [os.path.join(PUBLIC_DIR, fname), os.path.join(PARENT_DIR, fname)]:
                     if os.path.exists(a_path):
                         with open(a_path, "rb") as f:
                             data = f.read()
@@ -114,8 +110,7 @@ class handler(server.SAPCloseHTTPHandler):
                         self.wfile.write(data)
                         return
 
-        # 4. API Endpoints: Normalize path to start with /api if needed
-        api_path = path
+        # 4. Standard API Dispatch
         if not api_path.startswith("/api"):
             api_path = "/api" + (api_path if api_path.startswith("/") else "/" + api_path)
         self.path = f"{api_path}?{query}" if query else api_path
@@ -123,16 +118,14 @@ class handler(server.SAPCloseHTTPHandler):
         return super().do_GET()
 
     def do_POST(self):
-        path, query = self._get_target_path()
-        api_path = path
+        api_path, query = self._resolve_path_and_query()
         if not api_path.startswith("/api"):
             api_path = "/api" + (api_path if api_path.startswith("/") else "/" + api_path)
         self.path = f"{api_path}?{query}" if query else api_path
         return super().do_POST()
 
     def do_DELETE(self):
-        path, query = self._get_target_path()
-        api_path = path
+        api_path, query = self._resolve_path_and_query()
         if not api_path.startswith("/api"):
             api_path = "/api" + (api_path if api_path.startswith("/") else "/" + api_path)
         self.path = f"{api_path}?{query}" if query else api_path
