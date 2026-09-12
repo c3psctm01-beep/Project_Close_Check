@@ -1,0 +1,1042 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ระบบตรวจสอบการปิดงานก่อสร้าง SAP ZPSR018 | การไฟฟ้าส่วนภูมิภาค (PEA)</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Prompt:wght@300;400;500;600;700&family=Sarabun:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  <link rel="stylesheet" href="style.css">
+  <!-- Chart.js for data visualization -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+  <!-- Header / Navigation Bar -->
+  <header class="pea-navbar">
+    <div class="nav-left">
+      <div class="pea-brand">
+        <div class="pea-logo-emblem">
+          <i class="fa-solid fa-bolt-lightning"></i>
+        </div>
+        <div class="brand-text">
+          <span class="brand-org">การไฟฟ้าส่วนภูมิภาค (PEA)</span>
+          <h1 class="brand-title">ระบบตรวจสอบการปิดงานก่อสร้าง SAP (ZPSR018 / ZBUDR018)</h1>
+        </div>
+      </div>
+    </div>
+    
+    <div class="nav-right">
+      <!-- Project Selector -->
+      <div class="project-selector-wrapper">
+        <label for="projectSelect"><i class="fa-solid fa-diagram-project"></i> เลือกโครงการ:</label>
+        <select id="projectSelect" class="pea-select">
+          <option value="">กำลังโหลดโครงการ...</option>
+        </select>
+      </div>
+
+      <!-- Action Buttons -->
+      <button id="btnUploadModal" class="btn btn-gold">
+        <i class="fa-solid fa-cloud-arrow-up"></i> อัปโหลดไฟล์ SAP PDF
+      </button>
+
+      <button id="btnPrintReport" class="btn btn-outline-light" title="พิมพ์รายงานผลการตรวจสอบ กส.3 พร้อมแสดงการโอนงบ">
+        <i class="fa-solid fa-print"></i> พิมพ์รายงาน (กส.3)
+      </button>
+    </div>
+  </header>
+
+  <!-- Main Container -->
+  <main class="main-container">
+    <!-- Project Banner & Info Header -->
+    <section class="project-hero-card">
+      <div class="hero-top">
+        <div class="project-title-group">
+          <div class="badge-row">
+            <span class="pea-badge badge-purple" id="templateBadge"><i class="fa-solid fa-file-invoice"></i> TEMPLATE SAP ZPSR018</span>
+            <span class="pea-badge badge-wbs" id="wbsBadge"><i class="fa-solid fa-hashtag"></i> WBS: <strong id="heroWbs">-</strong></span>
+            <span class="pea-badge badge-status" id="closingStatusBadge"><i class="fa-solid fa-circle-exclamation"></i> รอตรวจสอบ</span>
+            <button id="btnDeleteCurrentProject" class="btn btn-xs btn-outline-danger" title="ลบโครงการปัจจุบันออกจากทะเบียน" style="margin-left: auto;">
+              <i class="fa-solid fa-trash-can"></i> ลบโครงการนี้
+            </button>
+          </div>
+          <h2 class="project-main-title" id="heroProjectName">กำลังโหลดข้อมูลโครงการ...</h2>
+          <div class="project-meta-inline">
+            <span><i class="fa-solid fa-user-gear"></i> ผู้ควบคุมงาน: <strong id="heroOfficer">-</strong></span>
+            <span><i class="fa-solid fa-id-card"></i> รหัส: <strong id="heroOfficerId">-</strong></span>
+            <span><i class="fa-solid fa-calendar-day"></i> วันที่พิมพ์รายงาน: <strong id="heroPrintDate">-</strong></span>
+          </div>
+        </div>
+
+        <!-- Target Closing Month Control Box -->
+        <div class="target-closing-panel">
+          <div class="target-panel-header">
+            <i class="fa-solid fa-calendar-check text-gold"></i>
+            <span>แผนเดือนที่ต้องปิดงาน</span>
+          </div>
+          <div class="target-panel-body">
+            <div class="target-inputs">
+              <select id="targetMonthSelect" class="pea-select-sm">
+                <option value="มกราคม">มกราคม</option>
+                <option value="กุมภาพันธ์">กุมภาพันธ์</option>
+                <option value="มีนาคม">มีนาคม</option>
+                <option value="เมษายน">เมษายน</option>
+                <option value="พฤษภาคม">พฤษภาคม</option>
+                <option value="มิถุนายน">มิถุนายน</option>
+                <option value="กรกฎาคม">กรกฎาคม</option>
+                <option value="สิงหาคม">สิงหาคม</option>
+                <option value="กันยายน">กันยายน</option>
+                <option value="ตุลาคม">ตุลาคม</option>
+                <option value="พฤศจิกายน">พฤศจิกายน</option>
+                <option value="ธันวาคม">ธันวาคม</option>
+              </select>
+              <select id="targetYearSelect" class="pea-select-sm">
+                <option value="2567">2567</option>
+                <option value="2568">2568</option>
+                <option value="2569">2569</option>
+                <option value="2570">2570</option>
+                <option value="2571">2571</option>
+              </select>
+              <button id="btnSaveTargetMonth" class="btn btn-sm btn-purple" title="บันทึกแผนเดือนปิดงาน">
+                <i class="fa-solid fa-floppy-disk"></i> บันทึก
+              </button>
+            </div>
+            <div class="target-status-badge" id="targetMonthStatus">
+              <i class="fa-solid fa-clock"></i> กำหนดเป้าหมาย: <span id="targetMonthDisplay">กันยายน 2569</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Top Key Metrics Cards (KPIs) -->
+    <section class="kpi-grid">
+      <!-- KPI 1: Closing Readiness -->
+      <div class="kpi-card" id="kpiReadinessCard">
+        <div class="kpi-icon icon-purple">
+          <i class="fa-solid fa-list-check"></i>
+        </div>
+        <div class="kpi-content">
+          <span class="kpi-label">ความพร้อมปิดงาน (Readiness)</span>
+          <div class="kpi-value-row">
+            <span class="kpi-number" id="kpiReadinessPct">0%</span>
+            <span class="kpi-status-tag" id="kpiReadinessTag">ต้องแก้ไข</span>
+          </div>
+          <p class="kpi-desc" id="kpiReadinessDesc">ตรวจสอบเงื่อนไขงบประมาณและพัสดุ</p>
+        </div>
+      </div>
+
+      <!-- KPI 2: Budget Deficit -->
+      <div class="kpi-card" id="kpiBudgetCard">
+        <div class="kpi-icon icon-danger">
+          <i class="fa-solid fa-hand-holding-dollar"></i>
+        </div>
+        <div class="kpi-content">
+          <span class="kpi-label">งบประมาณค่าใช้จ่ายหน้างาน (5 หมวด)</span>
+          <div class="kpi-value-row">
+            <span class="kpi-number text-danger" id="kpiBudgetDeficitVal">-38,550.56 ฿</span>
+            <span class="kpi-status-tag tag-danger" id="kpiBudgetTag">ติดลบ (ปิดงานไม่ได้)</span>
+            <span id="kpiDeficitCount" style="display:none;">1</span>
+          </div>
+          <p class="kpi-desc" id="kpiBudgetDesc">ติดลบในหมวด [ค่าเบ็ดเตล็ด] ต้องโอนงบชดเชย</p>
+        </div>
+      </div>
+
+      <!-- KPI 3: Materials to Return -->
+      <div class="kpi-card" id="kpiReturnCard">
+        <div class="kpi-icon icon-warning">
+          <i class="fa-solid fa-boxes-packing"></i>
+        </div>
+        <div class="kpi-content">
+          <span class="kpi-label">อุปกรณ์ที่ต้องส่งคืนคลัง</span>
+          <div class="kpi-value-row">
+            <span class="kpi-number" id="kpiReturnCount">0</span>
+            <span class="kpi-unit">รายการ</span>
+            <span class="kpi-status-tag tag-neutral" id="kpiReturnTag">ไม่มีค้างคืน</span>
+          </div>
+          <p class="kpi-desc" id="kpiReturnDesc">พัสดุเบิกเกิน / ไม่ได้ติดตั้ง / พัสดุรื้อถอน</p>
+        </div>
+      </div>
+
+      <!-- KPI 4: Materials to Withdraw -->
+      <div class="kpi-card" id="kpiWithdrawCard">
+        <div class="kpi-icon icon-primary">
+          <i class="fa-solid fa-dolly"></i>
+        </div>
+        <div class="kpi-content">
+          <span class="kpi-label">อุปกรณ์ที่ต้องเบิกออก / ขาดเบิก</span>
+          <div class="kpi-value-row">
+            <span class="kpi-number text-warning" id="kpiWithdrawCount">0</span>
+            <span class="kpi-unit">รายการ</span>
+            <span class="kpi-status-tag tag-warning" id="kpiWithdrawTag">มีรายการขาดเบิก</span>
+          </div>
+          <p class="kpi-desc" id="kpiWithdrawDesc">ประมาณการไว้แต่ยังไม่ได้เบิกจ่ายจริง</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- Navigation Tabs -->
+    <div class="tabs-nav-container">
+      <button class="tab-btn active" data-tab="tab-overview">
+        <i class="fa-solid fa-chart-pie"></i> 1. ภาพรวมสถานะปิดงาน
+      </button>
+      <button class="tab-btn" data-tab="tab-budget">
+        <i class="fa-solid fa-money-bill-transfer"></i> 2. วิเคราะห์ค่าใช้จ่ายหน้างาน & โอนงบ
+        <span class="tab-badge badge-danger" id="budgetTabBadge">ติดลบ 1 หมวด</span>
+      </button>
+      <button class="tab-btn" data-tab="tab-materials">
+        <i class="fa-solid fa-boxes-stacked"></i> 3. วิเคราะห์อุปกรณ์ (ส่งคืน / เบิกออก)
+        <span class="tab-badge badge-warning" id="matTabBadge">81 ขาดเบิก</span>
+      </button>
+      <button class="tab-btn" data-tab="tab-all-materials">
+        <i class="fa-solid fa-table-list"></i> 4. ทะเบียนพัสดุทั้งหมด (176 รายการ)
+      </button>
+      <button class="tab-btn" data-tab="tab-projects">
+        <i class="fa-solid fa-folder-tree"></i> 5. ทะเบียนโครงการทั้งหมด & แผนปิดงาน
+      </button>
+    </div>
+
+    <!-- Tab 1: Project Closing Overview -->
+    <section id="tab-overview" class="tab-content active">
+      <div class="grid-2-col">
+        <!-- Checklist Panel -->
+        <div class="pea-panel">
+          <div class="panel-header">
+            <h3><i class="fa-solid fa-clipboard-check text-purple"></i> ตรวจสอบเงื่อนไขการปิดงานในระบบ SAP</h3>
+            <span class="badge-status-pill" id="overallClosingBadge">ปิดงานไม่ได้</span>
+          </div>
+          <div class="panel-body">
+            <div class="checklist-list">
+              <!-- Item 1: Template -->
+              <div class="check-item check-pass">
+                <div class="check-icon"><i class="fa-solid fa-circle-check"></i></div>
+                <div class="check-info">
+                  <strong>1. ความถูกต้องของเอกสาร SAP (ZPSR018 / ZBUDR018)</strong>
+                  <p>รายงานตรงตามแบบมาตรฐานการปิดงานก่อสร้างของการไฟฟ้าส่วนภูมิภาค</p>
+                </div>
+                <span class="check-badge bg-success">ผ่าน</span>
+              </div>
+
+              <!-- Item 2: Budget Deficit -->
+              <div class="check-item" id="checkItemBudget">
+                <div class="check-icon"><i class="fa-solid fa-circle-xmark text-danger"></i></div>
+                <div class="check-info">
+                  <strong>2. ตรวจสอบยอดงบประมาณติดลบ (Budget Deficit)</strong>
+                  <p id="checkBudgetDesc">พบหมวดค่าใช้จ่ายที่ติดลบ 3 หมวด ยอดรวม -158,038.96 บาท (ปิดงานไม่ได้)</p>
+                </div>
+                <span class="check-badge bg-danger" id="checkBudgetBadge">ไม่ผ่าน</span>
+              </div>
+
+              <!-- Item 3: Material Excess to Return -->
+              <div class="check-item" id="checkItemReturn">
+                <div class="check-icon"><i class="fa-solid fa-circle-check text-success"></i></div>
+                <div class="check-info">
+                  <strong>3. ตรวจสอบพัสดุค้างส่งคืนคลัง</strong>
+                  <p id="checkReturnDesc">ไม่มีพัสดุเบิกเกินค้างส่งคืน หรือส่งคืนคลังเรียบร้อยแล้ว</p>
+                </div>
+                <span class="check-badge bg-success" id="checkReturnBadge">ผ่าน</span>
+              </div>
+
+              <!-- Item 4: Material Pending Withdrawal -->
+              <div class="check-item" id="checkItemWithdraw">
+                <div class="check-icon"><i class="fa-solid fa-triangle-exclamation text-warning"></i></div>
+                <div class="check-info">
+                  <strong>4. ตรวจสอบพัสดุตามประมาณการที่ยังไม่ได้เบิก (Pending Withdrawal)</strong>
+                  <p id="checkWithdrawDesc">มีพัสดุตามแบบที่ยังไม่ได้เบิก 81 รายการ (ต้องตรวจสอบว่าใช้จริงหรือไม่เพื่อปลดจอง)</p>
+                </div>
+                <span class="check-badge bg-warning" id="checkWithdrawBadge">แจ้งเตือน</span>
+              </div>
+
+              <!-- Item 5: Target Month -->
+              <div class="check-item check-pass">
+                <div class="check-icon"><i class="fa-solid fa-circle-check text-success"></i></div>
+                <div class="check-info">
+                  <strong>5. แผนกำหนดเดือนปิดงานก่อสร้าง</strong>
+                  <p>ระบุเป้าหมายปิดงานภายในเดือน: <strong id="checkTargetMonthText">กันยายน 2569</strong></p>
+                </div>
+                <span class="check-badge bg-success">กำหนดแล้ว</span>
+              </div>
+            </div>
+
+            <!-- Action Summary Box -->
+            <div class="closing-action-box" id="closingActionBox">
+              <div class="action-box-icon"><i class="fa-solid fa-lightbulb"></i></div>
+              <div class="action-box-text">
+                <h4>ข้อแนะนำในการปิดงาน:</h4>
+                <p id="closingActionSummary">
+                  โครงการนี้ยังไม่สามารถปิดงานได้เนื่องจาก <strong>ยอดเงินติดลบ 3 หมวด (รวม -158,038.96 บาท)</strong> 
+                  ให้ดำเนินการโอนงบประมาณจากหมวดค่าใช้จ่ายหน้างานที่มีเงินเหลือ (เช่น ค่าควบคุมงาน หรือ ค่าแรงงาน) มาชดเชย 
+                  และตรวจสอบรายการพัสดุที่ยังไม่ได้เบิก 81 รายการให้เรียบร้อยก่อนส่งเอกสาร กส.3
+                </p>
+                <button class="btn btn-sm btn-gold mt-2" onclick="switchTab('tab-budget')">
+                  <i class="fa-solid fa-arrow-right"></i> ดูแผนการโอนงบประมาณทันที
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Budget Chart Panel -->
+        <div class="pea-panel">
+          <div class="panel-header">
+            <h3><i class="fa-solid fa-chart-column text-purple"></i> สรุปผลต่างงบประมาณ 10 หมวดค่าใช้จ่าย</h3>
+            <span class="badge-tag">หน่วย: บาท</span>
+          </div>
+          <div class="panel-body">
+            <div class="chart-container">
+              <canvas id="budgetDiffChart"></canvas>
+            </div>
+            <div class="chart-legend-box">
+              <span class="legend-item"><span class="dot dot-green"></span> งบประมาณคงเหลือ (พร้อมโอนออก)</span>
+              <span class="legend-item"><span class="dot dot-red"></span> งบประมาณติดลบ (ปิดงานไม่ได้)</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Tab 2: Budget Analysis & Transfer Reallocation -->
+    <section id="tab-budget" class="tab-content">
+      <!-- Section 1: Site Expenses (5 Categories) -->
+      <div class="pea-panel mb-4">
+        <div class="panel-header header-gradient-danger">
+          <div class="header-title-group">
+            <h3><i class="fa-solid fa-helmet-safety"></i> 1. ตารางวิเคราะห์ค่าใช้จ่ายหน้างาน (5 หมวดหลักที่ควบคุมงบประมาณ)</h3>
+            <p class="subtitle">วิเคราะห์เฉพาะ: ค่าแรงงาน/ค่าจ้างเหมา, ค่าควบคุมงาน, ค่าขนส่ง/ยานพาหนะ, ค่าเบ็ดเตล็ด และค่าดำเนินการ</p>
+          </div>
+          <div class="deficit-total-badge">
+            <span>ยอดติดลบหน้างาน (ค่าเบ็ดเตล็ด):</span>
+            <strong id="budgetTotalDeficitSum">-38,550.56 ฿</strong>
+          </div>
+        </div>
+        <div class="panel-body p-0">
+          <div class="table-responsive">
+            <table class="pea-table table-hover" id="siteBudgetTable">
+              <thead>
+                <tr>
+                  <th>ลำดับ</th>
+                  <th>หมวดค่าใช้จ่ายหน้างาน</th>
+                  <th>ค่าใช้จ่ายจริง (บาท)</th>
+                  <th>ผลต่างงบประมาณ (บาท)</th>
+                  <th>สัดส่วน</th>
+                  <th>สถานะการปิดงาน</th>
+                </tr>
+              </thead>
+              <tbody id="siteBudgetTableBody">
+                <!-- Dynamically populated -->
+              </tbody>
+              <tfoot id="siteBudgetTableFoot" class="bg-light font-weight-bold">
+                <!-- Subtotal row populated dynamically -->
+              </tfoot>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- Section 2: Material Expenses (พัสดุ และพัสดุเข้างาน) -->
+      <div class="pea-panel mb-4">
+        <div class="panel-header header-gradient-gold">
+          <div class="header-title-group">
+            <h3><i class="fa-solid fa-boxes-stacked"></i> 2. หมวดพัสดุโครงการ (ค่าพัสดุ และพัสดุเข้างาน)</h3>
+            <p class="subtitle">แสดงมูลค่าพัสดุที่เบิกใช้จริงและงบประมาณคงเหลือในส่วนของพัสดุ</p>
+          </div>
+          <div class="badge-status-pill bg-success" id="matSurplusBadge">
+            งบพัสดุคงเหลือ: +1,085,398.67 ฿
+          </div>
+        </div>
+        <div class="panel-body p-0">
+          <div class="table-responsive">
+            <table class="pea-table table-hover" id="materialBudgetTable">
+              <thead>
+                <tr>
+                  <th>ลำดับ</th>
+                  <th>หมวดพัสดุ</th>
+                  <th>ค่าใช้จ่ายจริง (บาท)</th>
+                  <th>ผลต่างงบประมาณ (บาท)</th>
+                  <th>สัดส่วน</th>
+                  <th>สถานะ</th>
+                </tr>
+              </thead>
+              <tbody id="materialBudgetTableBody">
+                <!-- Dynamically populated -->
+              </tbody>
+              <tfoot id="materialBudgetTableFoot" class="bg-light font-weight-bold">
+                <!-- Subtotal row populated dynamically -->
+              </tfoot>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- Section 3: SAP Network Financial Analysis (ตารางวิเคราะห์การเงินจำแนกตามเลขที่โครงข่าย) -->
+      <div class="pea-panel mb-4" id="networkAnalysisPanel">
+        <div class="panel-header header-gradient-purple">
+          <div class="header-title-group">
+            <h3><i class="fa-solid fa-network-wired"></i> 3. ตารางวิเคราะห์การเงินจำแนกตามเลขที่โครงข่าย (SAP Network Analysis)</h3>
+            <p class="subtitle">วิเคราะห์งบประมาณและค่าใช้จ่ายจริงรายเลขที่โครงข่าย พร้อมชี้เป้าโครงข่ายที่เป็นสาเหตุของยอดเงินติดลบ</p>
+          </div>
+          <div class="network-summary-badges">
+            <span class="badge-tag bg-purple"><i class="fa-solid fa-sitemap"></i> ทั้งหมด: <strong id="netCountTotal">6</strong> โครงข่าย</span>
+            <span class="badge-tag bg-success"><i class="fa-solid fa-circle-check"></i> พร้อมปิดงาน: <strong id="netCountPass">5</strong></span>
+            <span class="badge-tag bg-danger"><i class="fa-solid fa-circle-xmark"></i> ติดลบ: <strong id="netCountDeficit">1</strong></span>
+          </div>
+        </div>
+        <div class="panel-body">
+          <!-- Network Root Cause Callout Alert -->
+          <div class="network-alert-box mb-3" id="networkAlertBox">
+            <div class="net-alert-icon"><i class="fa-solid fa-triangle-exclamation"></i></div>
+            <div class="net-alert-text">
+              <h4>ผลการวิเคราะห์เจาะลึกระดับโครงข่าย (Network Root-Cause Analysis):</h4>
+              <p id="networkAlertDesc">
+                ยอดติดลบในหมวดค่าเบ็ดเตล็ด (-38,550.56 ฿) ของทั้งโครงการ เกิดขึ้นจาก 
+                <strong class="text-danger">โครงข่าย 6001322483 (SUB-C-I ก่อสร้างสถานีไฟฟ้าภายใน)</strong> เพียงโครงข่ายเดียว 
+                ซึ่งใช้จ่ายค่าเบ็ดเตล็ดจริง 117,017.49 ฿ เกินงบประมาณการที่ตั้งไว้ 27,934.00 ฿ ถึง 
+                <strong class="text-danger">-89,083.49 ฿</strong> และส่งผลให้ยอดรวมทั้งโครงข่ายนี้ติดลบ 
+                <strong class="text-danger">-9,317.92 ฿</strong> ในขณะที่โครงข่ายอื่นๆ อีก 5 โครงข่ายมีงบประมาณเหลือทั้งหมด
+              </p>
+            </div>
+          </div>
+
+          <!-- Network Filter Toolbar -->
+          <div class="network-toolbar mb-3">
+            <div class="net-filter-tabs">
+              <button class="net-filter-btn active" data-filter="all" id="btnFilterNetAll">
+                <i class="fa-solid fa-list"></i> ทั้งหมด (<span id="filterNetAllCount">6</span>)
+              </button>
+              <button class="net-filter-btn filter-danger" data-filter="deficit" id="btnFilterNetDeficit">
+                <i class="fa-solid fa-triangle-exclamation"></i> เฉพาะที่ติดลบ (<span id="filterNetDeficitCount">1</span>)
+              </button>
+              <button class="net-filter-btn filter-success" data-filter="ready" id="btnFilterNetReady">
+                <i class="fa-solid fa-circle-check"></i> งบไม่เกิน (<span id="filterNetReadyCount">5</span>)
+              </button>
+            </div>
+            <div class="net-quick-hint">
+              <i class="fa-solid fa-magnifying-glass-chart text-gold"></i> กดปุ่ม <strong>"ดู 10 หมวด"</strong> เพื่อดูรายละเอียดค่าใช้จ่ายของโครงข่ายนั้นๆ
+            </div>
+          </div>
+
+          <!-- Networks Table -->
+          <div class="table-responsive">
+            <table class="pea-table table-hover" id="networksTable">
+              <thead>
+                <tr>
+                  <th style="width: 45px;" class="text-center">ที่</th>
+                  <th>เลขที่โครงข่าย</th>
+                  <th>รายการโครงข่าย / แผนก</th>
+                  <th class="text-right">ประมาณการรวม (฿)</th>
+                  <th class="text-right">ค่าใช้จ่ายจริงรวม (฿)</th>
+                  <th class="text-right">ผลต่างรวม (฿)</th>
+                  <th class="text-right">หน้างานจริง 5 หมวด (฿)</th>
+                  <th class="text-right">ผลต่างหน้างาน (฿)</th>
+                  <th>หมวดที่ติดลบ / ข้อสังเกต</th>
+                  <th class="text-center" style="min-width: 110px;">สถานะ</th>
+                  <th class="text-center">เจาะลึก</th>
+                </tr>
+              </thead>
+              <tbody id="networksTableBody">
+                <!-- Dynamically populated -->
+              </tbody>
+              <tfoot id="networksTableFoot" class="bg-light font-weight-bold">
+                <!-- Total summary row -->
+              </tfoot>
+            </table>
+          </div>
+
+          <!-- Inter-Network Reallocation Guide -->
+          <div class="net-transfer-guide mt-4">
+            <h4 class="guide-title"><i class="fa-solid fa-arrows-split-up-and-left text-gold"></i> แนวทางการโอนงบประมาณระดับโครงข่าย (Network Budget Reallocation Plan):</h4>
+            <div class="net-guide-grid" id="netTransferGuideGrid">
+              <!-- Network transfer cards dynamically populated -->
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Section 4: Smart Transfer Recommendation for Site Deficit -->
+      <div class="pea-panel mb-4">
+        <div class="panel-header header-gradient-gold">
+          <div class="header-title-group">
+            <h3><i class="fa-solid fa-wand-magic-sparkles"></i> 4. แผนการโอนงบประมาณเพื่อแก้ปัญหายอดเงินติดลบหน้างาน</h3>
+            <p class="subtitle">วิเคราะห์การโอนงบประมาณระดับโครงข่ายและหมวดค่าใช้จ่ายหน้างาน เพื่อแก้ไขยอดเงินติดลบให้ไม่ติดลบทุกหมวดพร้อมปิดงาน</p>
+          </div>
+          <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
+            <button id="btnExportApprovalDocx" class="btn btn-sm btn-gold" title="นำข้อมูลวิเคราะห์ใส่ไฟล์แบบฟอร์มขออนุมัติค่าใช้จ่ายหน้างาน Word">
+              <i class="fa-solid fa-file-word"></i> บันทึกลงแบบฟอร์มขออนุมัติ (.docx)
+            </button>
+            <button id="btnPrintSectionPdf" class="btn btn-sm btn-purple" title="พิมพ์รายงาน กส.3 พร้อมตารางแสดงการโอนงบ">
+              <i class="fa-solid fa-print"></i> พิมพ์รายงาน (กส.3)
+            </button>
+            <button id="btnCopyTransferMemo" class="btn btn-sm btn-dark">
+              <i class="fa-solid fa-file-pen"></i> บันทึกข้อความขอโอนงบ SAP
+            </button>
+          </div>
+        </div>
+        <div class="panel-body">
+          <!-- Policy Rules Banner -->
+          <div class="transfer-policy-box mb-4">
+            <div class="policy-header">
+              <i class="fa-solid fa-shield-halved text-purple"></i> <strong>เงื่อนไขและระเบียบการโอนงบประมาณในระบบ SAP (กฟภ.):</strong>
+            </div>
+            <div class="policy-grid">
+              <div class="policy-item item-prohibited">
+                <span class="policy-badge badge-prohibited"><i class="fa-solid fa-ban"></i> หมวดที่ห้ามโอนเด็ดขาด</span>
+                <p><strong>ค่าพัสดุ, ค่าพัสดุเข้างาน, บันทึกเวลา / ปันส่วน, ค่าดอกเบี้ยฯ / ทางอ้อม, ค่าใช้จ่ายทางอ้อม / อื่นๆ</strong> ไม่สามารถนำมาโอนชดเชยค่าใช้จ่ายหน้างานได้ตามระเบียบ</p>
+              </div>
+              <div class="policy-item item-allowed">
+                <span class="policy-badge badge-allowed"><i class="fa-solid fa-circle-check"></i> หมวดที่โอนได้ตามปกติ</span>
+                <p>โอนได้เฉพาะกลุ่ม <strong>ค่าใช้จ่ายหน้างาน</strong> (ค่าควบคุมงาน, ค่าแรงงาน / ค่าจ้างเหมา, ค่าขนส่ง / ยานพาหนะ, ค่าเบ็ดเตล็ด)</p>
+              </div>
+              <div class="policy-item item-conditional">
+                <span class="policy-badge badge-conditional"><i class="fa-solid fa-triangle-exclamation"></i> เงื่อนไขพิเศษ: ค่าดำเนินการ</span>
+                <p><strong>หมวดค่าดำเนินการ</strong> จะนำมาใช้ได้ต่อเมื่อค่าใช้จ่ายในส่วนอื่นติดลบหมดหรือไม่เพียงพอเท่านั้น (หมวดสำรองลำดับสุดท้าย)</p>
+              </div>
+            </div>
+          </div>
+
+          <div class="transfer-cards-grid" id="transferCardsGrid">
+            <!-- Transfer recommendation cards dynamically loaded -->
+          </div>
+
+          <!-- Transfer Simulation Table -->
+          <div class="simulation-section mt-4">
+            <h4 class="sim-title"><i class="fa-solid fa-calculator"></i> ตารางจำลองการโอนค่าใช้จ่าย (Transfer Simulation Detail)</h4>
+            <p class="text-muted" style="font-size: 0.82rem; margin-top: -0.25rem;">แสดงรายละเอียดการโอนงบประมาณ: โอนจากโครงข่ายไหน ค่าใช้จ่ายจากไหน โอนไปโครงข่ายไหน</p>
+            <div class="table-responsive">
+              <table class="pea-table table-bordered">
+                <thead>
+                  <tr>
+                    <th class="text-center" style="width: 40px;">ลำดับ</th>
+                    <th>ประเภทการโอน</th>
+                    <th>โอนจากโครงข่าย</th>
+                    <th>หมวดค่าใช้จ่ายต้นทาง</th>
+                    <th>โอนไปโครงข่าย</th>
+                    <th>หมวดค่าใช้จ่ายปลายทาง</th>
+                    <th class="text-right">จำนวนเงินโอน (฿)</th>
+                    <th class="text-center">สถานะ</th>
+                  </tr>
+                </thead>
+                <tbody id="simulationTableBody">
+                  <!-- Dynamically populated -->
+                </tbody>
+              </table>
+            </div>
+
+            <!-- Post-Transfer Summary Table -->
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 1.5rem; margin-bottom: 0.5rem; flex-wrap: wrap; gap: 0.5rem;">
+              <h4 class="sim-title mb-0" style="margin: 0;"><i class="fa-solid fa-scale-balanced text-purple"></i> สรุปยอดค่าใช้จ่ายหน้างานหลังจำลองการโอน (แยกตามเลขที่โครงข่าย)</h4>
+              <div class="btn-group-filter" style="display: flex; gap: 6px;">
+                <button type="button" class="btn btn-xs btn-purple active" id="btnFilterTransferOnly" onclick="setPostTransferView('transfer_only')">
+                  <i class="fa-solid fa-filter"></i> เฉพาะโครงข่ายที่มีการโอนงบ
+                </button>
+                <button type="button" class="btn btn-xs btn-outline-dark" id="btnFilterAllNets" onclick="setPostTransferView('all')">
+                  <i class="fa-solid fa-list"></i> แสดงทุกโครงข่ายในโครงการ
+                </button>
+              </div>
+            </div>
+            <div class="table-responsive">
+              <table class="pea-table table-bordered">
+                <thead>
+                  <tr>
+                    <th style="width: 120px;">เลขที่โครงข่าย</th>
+                    <th>รายการ / งานโครงข่าย</th>
+                    <th>หมวดค่าใช้จ่ายหน้างาน</th>
+                    <th class="text-right">ยอดผลต่างเดิม (บาท)</th>
+                    <th class="text-center" style="min-width: 140px;">ยอดโอนเข้า (+) / โอนออก (-)</th>
+                    <th class="text-right">ยอดคงเหลือหลังโอน (บาท)</th>
+                    <th class="text-center" style="min-width: 150px;">สถานะหลังโอน</th>
+                  </tr>
+                </thead>
+                <tbody id="postTransferSummaryBody">
+                  <!-- Dynamically populated per network -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Section 5: Indirect / Allocated Expenses (Optional reference) -->
+      <div class="pea-panel">
+        <div class="panel-header">
+          <div>
+            <h3><i class="fa-solid fa-calculator text-muted"></i> 5. ข้อมูลเพิ่มเติม: ค่าใช้จ่ายปันส่วนทางบัญชี/ทางอ้อม</h3>
+            <p class="subtitle">ค่าใช้จ่ายที่ระบบ SAP คำนวณปันส่วนอัตโนมัติ (ไม่ใช่ค่าใช้จ่ายหน้างานที่ผู้ควบคุมงานควบคุม)</p>
+          </div>
+          <button class="btn btn-sm btn-outline-dark" onclick="exportBudgetToExcel()">
+            <i class="fa-solid fa-file-excel"></i> ส่งออกตารางงบประมาณ Excel
+          </button>
+        </div>
+        <div class="panel-body p-0">
+          <div class="table-responsive">
+            <table class="pea-table table-sm">
+              <thead>
+                <tr>
+                  <th>รหัส</th>
+                  <th>หมวดค่าใช้จ่ายปันส่วน</th>
+                  <th>ค่าใช้จ่ายจริง (บาท)</th>
+                  <th>ผลต่างงบประมาณ (บาท)</th>
+                  <th>หมายเหตุ</th>
+                </tr>
+              </thead>
+              <tbody id="allocatedBudgetTableBody">
+                <!-- Dynamically populated -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Tab 3: Materials Return & Withdrawal Inspector -->
+    <section id="tab-materials" class="tab-content">
+      <!-- Two Columns: Return vs Withdraw -->
+      <div class="grid-2-col mb-4">
+        <!-- Section: Materials to Return -->
+        <div class="pea-panel">
+          <div class="panel-header header-warning">
+            <div>
+              <h3><i class="fa-solid fa-arrow-rotate-left"></i> อุปกรณ์ที่ต้องส่งคืนคลังพัสดุ</h3>
+              <p class="subtitle">พัสดุที่เบิกเกินกว่าที่ติดตั้งจริง หรือพัสดุรื้อถอนที่ต้องรับคืนเข้าคลัง</p>
+            </div>
+            <span class="badge-count badge-warning" id="returnItemBadge">0 รายการ</span>
+          </div>
+          <div class="panel-body p-0">
+            <div class="table-responsive max-h-500">
+              <table class="pea-table table-sm">
+                <thead>
+                  <tr>
+                    <th>รหัสพัสดุ</th>
+                    <th>รายการ</th>
+                    <th>เบิก</th>
+                    <th>ติดตั้ง</th>
+                    <th>ต้องส่งคืน</th>
+                    <th>หน่วย</th>
+                  </tr>
+                </thead>
+                <tbody id="returnMaterialsTableBody">
+                  <tr><td colspan="6" class="text-center py-4 text-muted">ไม่พบอุปกรณ์ที่ค้างส่งคืนคลัง</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- Section: Materials to Withdraw -->
+        <div class="pea-panel">
+          <div class="panel-header header-primary">
+            <div>
+              <h3><i class="fa-solid fa-cart-flatbed"></i> อุปกรณ์ที่ต้องเบิกออก (ตามประมาณการ > เบิกจริง)</h3>
+              <p class="subtitle">พัสดุที่มีในแบบประมาณการแต่ยังไม่ได้เบิกจ่ายจริงจากระบบ SAP</p>
+            </div>
+            <span class="badge-count badge-primary" id="withdrawItemBadge">81 รายการ</span>
+          </div>
+          <div class="panel-body p-0">
+            <div class="table-responsive max-h-500">
+              <table class="pea-table table-sm">
+                <thead>
+                  <tr>
+                    <th>รหัสพัสดุ</th>
+                    <th>รายการ</th>
+                    <th>ประมาณการ</th>
+                    <th>เบิกจริง</th>
+                    <th>ขาดเบิก</th>
+                    <th>หน่วย</th>
+                  </tr>
+                </thead>
+                <tbody id="withdrawMaterialsTableBody">
+                  <!-- Dynamically populated -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Action Guidance Card -->
+      <div class="pea-panel">
+        <div class="panel-body guidance-body">
+          <div class="guidance-icon"><i class="fa-solid fa-circle-info text-purple"></i></div>
+          <div class="guidance-content">
+            <h4>คำแนะนำในการจัดการพัสดุก่อนปิดงาน (ระเบียบ กฟภ.):</h4>
+            <ul>
+              <li><strong>สำหรับพัสดุที่ต้องส่งคืนคลัง:</strong> ให้ผู้ควบคุมงานจัดทำใบส่งคืนพัสดุ (กส.4) ส่งมอบให้แผนกคลังพัสดุทำการตรวจรับคืนในระบบ SAP (Movement Type 262 หรือ 282)</li>
+              <li><strong>สำหรับพัสดุที่มีในประมาณการแต่ไม่ได้เบิก (81 รายการ):</strong> หากหน้างานจริงไม่ได้ใช้งาน ให้ผู้ควบคุมงานทำการ <em>"ปลดการจองพัสดุ (Close Reservation)"</em> ในระบบ SAP และปรับปรุงประมาณการ เพื่อไม่ให้มียอดจองค้างใน WBS</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Tab 4: All Materials Full Table -->
+    <section id="tab-all-materials" class="tab-content">
+      <div class="pea-panel">
+        <div class="panel-header">
+          <div class="header-left-tools">
+            <h3><i class="fa-solid fa-list-check text-purple"></i> ทะเบียนพัสดุและอุปกรณ์ทั้งหมดในรายงาน ZPSR018</h3>
+            <span class="badge-tag" id="totalMaterialsCountTag">176 รายการ</span>
+          </div>
+          
+          <div class="header-right-tools">
+            <!-- Filter by Status -->
+            <select id="materialFilterSelect" class="pea-select-sm">
+              <option value="ALL">พัสดุทั้งหมด (All)</option>
+              <option value="need_withdraw">เฉพาะที่ขาดเบิก (81 รายการ)</option>
+              <option value="need_return">เฉพาะที่ต้องคืนคลัง</option>
+              <option value="complete">เฉพาะที่ติดตั้งครบถ้วน</option>
+            </select>
+
+            <!-- Search input -->
+            <div class="search-input-wrapper">
+              <i class="fa-solid fa-magnifying-glass"></i>
+              <input type="text" id="materialSearchInput" placeholder="ค้นหารหัส หรือชื่อพัสดุ...">
+            </div>
+
+            <!-- Export -->
+            <button class="btn btn-sm btn-outline-purple" onclick="exportMaterialsToExcel()">
+              <i class="fa-solid fa-file-excel"></i> ส่งออก Excel
+            </button>
+          </div>
+        </div>
+
+        <div class="panel-body p-0">
+          <div class="table-responsive max-h-600">
+            <table class="pea-table table-hover table-sm" id="allMaterialsTable">
+              <thead>
+                <tr>
+                  <th>หน้า</th>
+                  <th>รหัสพัสดุ</th>
+                  <th>รายการพัสดุ</th>
+                  <th>หน่วย</th>
+                  <th>ประมาณการ</th>
+                  <th>เบิกจากคลัง</th>
+                  <th>ส่งคืนคลัง</th>
+                  <th>ติดตั้งจริง</th>
+                  <th>รวมค่าพัสดุเบิก (฿)</th>
+                  <th>สถานะการตรวจสอบ</th>
+                </tr>
+              </thead>
+              <tbody id="allMaterialsTableBody">
+                <!-- Dynamically populated -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Tab 5: Projects Directory & Schedule Management -->
+    <section id="tab-projects" class="tab-content">
+      <div class="pea-panel">
+        <div class="panel-header">
+          <div>
+            <h3><i class="fa-solid fa-folder-open text-purple"></i> ทะเบียนโครงการทั้งหมดและการติดตามแผนเดือนปิดงาน</h3>
+            <p class="subtitle">จัดเก็บและบริหารข้อมูลโครงการแต่ละโครงการอย่างเป็นระบบ พร้อมสถานะความพร้อมปิดงาน</p>
+          </div>
+          <button class="btn btn-sm btn-gold" onclick="openUploadModal()">
+            <i class="fa-solid fa-plus"></i> เพิ่มโครงการใหม่ (อัปโหลด PDF)
+          </button>
+        </div>
+        <div class="panel-body p-0">
+          <div class="table-responsive">
+            <table class="pea-table table-hover" id="projectsDirectoryTable">
+              <thead>
+                <tr>
+                  <th>หมายเลข WBS</th>
+                  <th>ชื่อโครงการก่อสร้าง</th>
+                  <th>ผู้ควบคุมงาน</th>
+                  <th>แผนเดือนปิดงาน</th>
+                  <th>ยอดเงินติดลบ</th>
+                  <th>พัสดุขาดเบิก</th>
+                  <th>สถานะปิดงาน</th>
+                  <th>การจัดการ</th>
+                </tr>
+              </thead>
+              <tbody id="projectsDirectoryTableBody">
+                <!-- Dynamically populated -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- Upload Modal -->
+  <div class="pea-modal-backdrop" id="uploadModal">
+    <div class="pea-modal">
+      <div class="modal-header">
+        <h3><i class="fa-solid fa-cloud-arrow-up text-gold"></i> อัปโหลดไฟล์รายงาน SAP ZPSR018 / ZBUDR018</h3>
+        <button class="modal-close-btn" id="btnCloseUploadModal"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <div class="modal-body">
+        <!-- Validation Warning Note -->
+        <div class="modal-alert-info">
+          <i class="fa-solid fa-shield-halved"></i>
+          <div>
+            <strong>เงื่อนไขการตรวจสอบไฟล์:</strong>
+            <p>ระบบจะตรวจสอบความถูกต้องของรายงานจากระบบ SAP (ต้องเป็น Template รายงานการปิดงาน <strong>ZPSR018</strong> หรือ <strong>ZBUDR018</strong> ของ กฟภ. เท่านั้น) หากไม่ใช่ไฟล์ที่ถูกต้อง ระบบจะปฏิเสธการอัปโหลดทันที</p>
+          </div>
+        </div>
+
+        <!-- Dropzone -->
+        <div class="dropzone-area" id="pdfDropzone">
+          <input type="file" id="pdfFileInput" accept="application/pdf" style="display: none;">
+          <div class="dropzone-content">
+            <div class="dropzone-icon">
+              <i class="fa-solid fa-file-pdf"></i>
+            </div>
+            <h4>ลากไฟล์ PDF มาวางที่นี่ หรือคลิกเพื่อเลือกไฟล์</h4>
+            <p class="dropzone-sub">รองรับไฟล์รายงาน PDF จาก SAP (.pdf)</p>
+            <button type="button" class="btn btn-outline-purple mt-2" onclick="document.getElementById('pdfFileInput').click()">
+              <i class="fa-solid fa-folder-open"></i> เลือกไฟล์จากคอมพิวเตอร์
+            </button>
+          </div>
+        </div>
+
+        <!-- Selected File Preview -->
+        <div class="selected-file-card" id="selectedFileCard" style="display: none;">
+          <div class="file-card-info">
+            <i class="fa-solid fa-file-lines text-purple"></i>
+            <div>
+              <strong id="selectedFileName">filename.pdf</strong>
+              <span id="selectedFileSize">0 KB</span>
+            </div>
+          </div>
+          <button class="btn btn-sm btn-danger" id="btnRemoveSelectedFile"><i class="fa-solid fa-trash"></i></button>
+        </div>
+
+        <!-- Uploading Spinner -->
+        <div class="upload-progress-container" id="uploadProgressContainer" style="display: none;">
+          <div class="pea-spinner"></div>
+          <p id="uploadProgressText">กำลังวิเคราะห์และสกัดข้อมูลด้วย PyMuPDF Engine...</p>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-outline-dark" id="btnCancelUpload">ยกเลิก</button>
+        <button class="btn btn-gold" id="btnConfirmUpload" disabled>
+          <i class="fa-solid fa-magnifying-glass-chart"></i> เริ่มตรวจสอบและนำเข้าข้อมูล
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Invalid Template Error Modal -->
+  <div class="pea-modal-backdrop" id="invalidTemplateModal">
+    <div class="pea-modal modal-danger">
+      <div class="modal-header header-danger">
+        <h3><i class="fa-solid fa-triangle-exclamation"></i> ไม่สามารถอัปโหลดไฟล์ได้</h3>
+        <button class="modal-close-btn" id="btnCloseInvalidModal"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <div class="modal-body text-center py-4">
+        <div class="error-illustration">
+          <i class="fa-solid fa-ban text-danger"></i>
+        </div>
+        <h4 class="text-danger mt-3" id="invalidModalMainTitle">ไฟล์นี้ไม่ใช่รายงานจากระบบ SAP หรือ Template ไม่ถูกต้อง</h4>
+        <p class="mt-2 text-muted" id="invalidModalErrorText">
+          ระบบตรวจสอบพบว่าไฟล์ที่ท่านเลือกไม่ใช่รายงานการปิดงานก่อสร้าง Template <strong>ZPSR018</strong> หรือ <strong>ZBUDR018</strong> ของการไฟฟ้าส่วนภูมิภาค
+        </p>
+        <div class="error-hint-box mt-3 text-left">
+          <strong>โปรดตรวจสอบดังนี้:</strong>
+          <ul>
+            <li>ไฟล์ต้อง Export จาก SAP คีย์โค้ด <code>ZPSR018</code> หรือ <code>ZBUDR018</code></li>
+            <li>หัวเอกสารต้องระบุ "รายงานการปิดงานก่อสร้าง(กส.)"</li>
+            <li>ต้องมีตารางพัสดุและตารางสรุปผลต่างงบประมาณ</li>
+          </ul>
+        </div>
+      </div>
+      <div class="modal-footer justify-content-center">
+        <button class="btn btn-purple" id="btnRetryUpload">
+          <i class="fa-solid fa-arrow-rotate-left"></i> ลองใหม่อีกครั้ง
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Network Drilldown Modal -->
+  <div class="pea-modal-backdrop" id="networkModal">
+    <div class="pea-modal modal-lg">
+      <div class="modal-header">
+        <h3><i class="fa-solid fa-network-wired"></i> รายละเอียดโครงข่าย: <span id="modalNetNo">-</span></h3>
+        <button class="modal-close-btn" id="btnCloseNetworkModal" title="ปิดหน้าต่าง"><i class="fa-solid fa-xmark"></i> ออก (ESC)</button>
+      </div>
+      <div class="modal-body">
+        <div class="net-modal-desc-banner mb-3">
+          <div class="desc-item">
+            <span class="text-muted">รายการโครงข่าย / แผนก:</span>
+            <strong id="modalNetDesc" class="text-purple">-</strong>
+          </div>
+          <div class="desc-item">
+            <span class="text-muted">สถานะปิดงาน:</span>
+            <span id="modalNetStatusBadge" class="badge-status-pill">-</span>
+          </div>
+        </div>
+
+        <div class="net-modal-kpi-grid mb-3">
+          <div class="net-kpi-mini">
+            <span class="lbl">ประมาณการรวม</span>
+            <strong id="modalNetEstimate">-</strong>
+          </div>
+          <div class="net-kpi-mini">
+            <span class="lbl">ค่าใช้จ่ายจริงรวม</span>
+            <strong id="modalNetActual">-</strong>
+          </div>
+          <div class="net-kpi-mini">
+            <span class="lbl">ผลต่างรวมทั้งโครงข่าย</span>
+            <strong id="modalNetDiff">-</strong>
+          </div>
+          <div class="net-kpi-mini">
+            <span class="lbl">ผลต่างหน้างาน (5 หมวด)</span>
+            <strong id="modalNetSiteDiff">-</strong>
+          </div>
+        </div>
+
+        <h4 class="mt-3 mb-2 font-weight-bold text-purple"><i class="fa-solid fa-list-ol"></i> ค่าใช้จ่าย 10 หมวดของโครงข่ายนี้ (ตามรายงาน SAP):</h4>
+        <div class="table-responsive">
+          <table class="pea-table table-sm table-hover" id="modalNetCategoryTable">
+            <thead>
+              <tr>
+                <th style="width: 45px;" class="text-center">ลำดับ</th>
+                <th>หมวดค่าใช้จ่าย</th>
+                <th>กลุ่ม</th>
+                <th class="text-right">ประมาณการ (฿)</th>
+                <th class="text-right">ใช้จริง (฿)</th>
+                <th class="text-right">ผลต่างงบฯ (฿)</th>
+                <th class="text-center">สถานะ</th>
+              </tr>
+            </thead>
+            <tbody id="modalNetCategoryTableBody">
+              <!-- Dynamically populated -->
+            </tbody>
+          </table>
+        </div>
+
+        <div class="modal-transfer-box mt-3" id="modalNetTransferBox">
+          <!-- Dynamic suggestion -->
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-danger font-weight-bold" id="btnCloseNetworkModalBtn">
+          <i class="fa-solid fa-arrow-right-from-bracket"></i> ปิดหน้าต่าง (ออก)
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Memo Modal -->
+  <div class="pea-modal-backdrop" id="memoModal">
+    <div class="pea-modal modal-lg">
+      <div class="modal-header">
+        <h3><i class="fa-solid fa-file-pen text-purple"></i> บันทึกข้อความขออนุมัติโอนงบประมาณ (SAP WBS)</h3>
+        <button class="modal-close-btn" id="btnCloseMemoModal" title="ปิดหน้าต่าง"><i class="fa-solid fa-xmark"></i> ออก (ESC)</button>
+      </div>
+      <div class="modal-body">
+        <div class="memo-container">
+          <textarea id="memoTextarea" class="memo-textarea" rows="15" readonly></textarea>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-outline-dark" id="btnCloseMemoBtn"><i class="fa-solid fa-xmark"></i> ปิดหน้าต่าง</button>
+        <button class="btn btn-purple" id="btnPrintMemoPdf" title="พิมพ์รายงาน กส.3 พร้อมตารางแสดงการโอนงบ">
+          <i class="fa-solid fa-print"></i> พิมพ์รายงาน (กส.3)
+        </button>
+        <button class="btn btn-primary" id="btnExportMemoDocx" title="นำผลการวิเคราะห์ใส่ในไฟล์ 2.แบบฟอร์มอนุมัติค่าใช้จ่ายหน้างาน.docx บน Desktop">
+          <i class="fa-solid fa-file-word"></i> บันทึกลงแบบฟอร์มขออนุมัติ Word (.docx)
+        </button>
+        <button class="btn btn-gold" id="btnCopyMemoContent">
+          <i class="fa-solid fa-copy"></i> คัดลอกข้อความ
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Delete Project Confirmation Modal -->
+  <div class="pea-modal-backdrop" id="deleteConfirmModal">
+    <div class="pea-modal modal-danger" style="max-width: 520px;">
+      <div class="modal-header header-danger">
+        <h3><i class="fa-solid fa-triangle-exclamation"></i> ยืนยันการลบโครงการออกจากทะเบียน</h3>
+        <button class="modal-close-btn" id="btnCloseDeleteModal" title="ปิดหน้าต่าง"><i class="fa-solid fa-xmark"></i> ออก (ESC)</button>
+      </div>
+      <div class="modal-body">
+        <div class="delete-warning-box">
+          <p class="mb-2"><strong>คุณแน่ใจหรือไม่ว่าต้องการลบโครงการนี้ออกจากระบบ?</strong></p>
+          <div class="delete-project-info-card">
+            <div><span class="text-muted">หมายเลข WBS:</span> <strong id="deleteModalWbs" class="text-danger font-weight-bold">-</strong></div>
+            <div><span class="text-muted">ชื่อโครงการ:</span> <strong id="deleteModalName">-</strong></div>
+          </div>
+          <p class="text-danger mt-2 mb-0" style="font-size: 0.85rem;">
+            <i class="fa-solid fa-circle-exclamation"></i> ข้อมูลการวิเคราะห์ 10 หมวด, พัสดุ, และสถานะการปิดงานของโครงการนี้จะถูกลบออกจากฐานข้อมูลระบบ
+          </p>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-outline-dark" id="btnCancelDeleteProject">
+          <i class="fa-solid fa-xmark"></i> ยกเลิก
+        </button>
+        <button class="btn btn-danger font-weight-bold" id="btnConfirmDeleteProject">
+          <i class="fa-solid fa-trash-can"></i> ยืนยันการลบโครงการ
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Official Report Preview & Print Modal -->
+  <div class="pea-modal-backdrop" id="reportPreviewModal">
+    <div class="pea-modal modal-xl" style="max-width: 960px; width: 95vw;">
+      <div class="modal-header" style="background: linear-gradient(135deg, #1e1b4b 0%, #4c1d95 100%); color: #fff; padding: 14px 20px;">
+        <div style="display: flex; align-items: center; gap: 10px;">
+          <i class="fa-solid fa-print" style="font-size: 1.4rem; color: #fbbf24;"></i>
+          <div>
+            <h3 style="margin: 0; font-size: 1.15rem; color: #fff;">รายงานผลการตรวจสอบ กส.3 และแผนการโอนงบประมาณ</h3>
+            <span style="font-size: 0.8rem; color: #e2e8f0;">เอกสารทางการสำหรับการปิดงานก่อสร้างในระบบ SAP ZPSR018 / ZBUDR018</span>
+          </div>
+        </div>
+        <button class="modal-close-btn" id="btnCloseReportPreviewModal" title="ปิดหน้าต่าง" style="color: #fff;"><i class="fa-solid fa-xmark"></i> ออก (ESC)</button>
+      </div>
+      <div class="modal-body" style="background: #f1f5f9; padding: 20px; max-height: 75vh; overflow-y: auto;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; background: #fff; padding: 10px 16px; border-radius: 6px; border: 1px solid #e2e8f0;">
+          <span style="font-size: 0.85rem; color: #475569;">
+            <i class="fa-solid fa-circle-info text-purple"></i> ตรวจสอบความถูกต้องของรายงานด้านล่าง แล้วกด <strong>สั่งพิมพ์รายงาน (Print)</strong> เพื่อพิมพ์ออกเครื่องพิมพ์หรือเลือกบันทึกเป็น PDF ของระบบ
+          </span>
+          <div>
+            <button class="btn btn-sm btn-purple font-weight-bold" id="btnPrintBrowserBtn">
+              <i class="fa-solid fa-print"></i> สั่งพิมพ์รายงาน (Print)
+            </button>
+          </div>
+        </div>
+        <!-- Paper-like container -->
+        <div id="reportPreviewPaper" style="background: #ffffff; box-shadow: 0 4px 15px rgba(0,0,0,0.08); border-radius: 6px; padding: 25px 30px; margin: 0 auto; max-width: 880px;">
+          <!-- Content populated dynamically -->
+        </div>
+      </div>
+      <div class="modal-footer" style="display: flex; justify-content: space-between; align-items: center; background: #fff; border-top: 1px solid #e2e8f0; padding: 12px 20px;">
+        <button class="btn btn-outline-dark" id="btnCloseReportPreviewBtn">
+          <i class="fa-solid fa-xmark"></i> ปิดหน้าต่าง
+        </button>
+        <div>
+          <button class="btn btn-purple font-weight-bold" id="btnPrintBrowserBtnBottom">
+            <i class="fa-solid fa-print"></i> สั่งพิมพ์รายงาน (Print)
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Print Report Template (Hidden, shows only when printing) -->
+  <div id="printArea" class="print-only">
+    <!-- Generated on the fly by JS for printing -->
+  </div>
+
+  <!-- Footer -->
+  <footer class="pea-footer">
+    <div class="footer-inner">
+      <span>ระบบตรวจสอบการปิดงานก่อสร้าง SAP ZPSR018 / ZBUDR018</span>
+      <span>การไฟฟ้าส่วนภูมิภาค (Provincial Electricity Authority)</span>
+      <span>เวอร์ชัน 1.0.0 (Local-First System)</span>
+    </div>
+  </footer>
+
+  <!-- App Script -->
+  <script src="app.js"></script>
+</body>
+</html>
