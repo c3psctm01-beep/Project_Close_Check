@@ -411,6 +411,44 @@
 
     <!-- Tab 2: Budget Analysis & Transfer Reallocation -->
     <section id="tab-budget" class="tab-content">
+      <!-- Overall Project Budget Disbursement Banner -->
+      <div class="budget-disbursement-banner mb-4">
+        <div class="budget-disbursement-header">
+          <div class="budget-disbursement-title">
+            <i class="fa-solid fa-file-invoice-dollar text-gold" style="font-size: 1.4rem;"></i>
+            <div>
+              <h3 style="color: #fbbf24; margin: 0; font-size: 1.15rem;">ข้อมูลการจัดสรรและการเบิกจ่ายงบประมาณโครงการ (SAP ZPSR018 Budget Summary)</h3>
+              <p style="margin: 0; font-size: 0.8rem; color: #cbd5e1;">รายงานสรุปงบประมาณที่ได้รับจัดสรรและการเบิกจ่ายจริงอย่างเป็นทางการจากระบบ SAP</p>
+            </div>
+          </div>
+          <span class="pea-badge badge-purple" id="budgetDisbursementBadge">
+            <i class="fa-solid fa-calculator"></i> ข้อมูลทางการ SAP
+          </span>
+        </div>
+        <div class="budget-disbursement-grid">
+          <div class="budget-metric-card">
+            <span class="budget-metric-label"><i class="fa-solid fa-piggy-bank text-warning"></i> งบประมาณที่ได้รับจัดสรร</span>
+            <div class="budget-metric-val text-warning" id="projAllocatedBudgetVal">0.00 ฿</div>
+            <div class="budget-metric-hint">วงเงินงบประมาณที่อนุมัติให้โครงการ</div>
+          </div>
+          <div class="budget-metric-card">
+            <span class="budget-metric-label"><i class="fa-solid fa-money-bill-transfer text-white"></i> ค่าใช้จ่ายจริง (เฉพาะที่ควบคุมงบฯ)</span>
+            <div class="budget-metric-val" id="projControlledActualVal">0.00 ฿</div>
+            <div class="budget-metric-hint">ยอดเบิกจ่ายจริงสะสมในระบบ</div>
+          </div>
+          <div class="budget-metric-card">
+            <span class="budget-metric-label"><i class="fa-solid fa-wallet text-success"></i> งบประมาณคงเหลือ</span>
+            <div class="budget-metric-val text-success" id="projRemainingBudgetVal">0.00 ฿</div>
+            <div class="budget-metric-hint" id="projRemainingBudgetHint">งบประมาณคงเหลือพร้อมปิดงาน</div>
+          </div>
+          <div class="budget-metric-card">
+            <span class="budget-metric-label"><i class="fa-solid fa-chart-pie text-info"></i> อัตราการเบิกจ่ายจริง</span>
+            <div class="budget-metric-val text-info" id="projDisbursementRateVal">0.0%</div>
+            <div class="budget-metric-hint">สัดส่วนเบิกจ่ายจริงต่องบที่จัดสรร</div>
+          </div>
+        </div>
+      </div>
+
       <!-- Section 1: Site Expenses (5 Categories) -->
       <div class="pea-panel mb-4">
         <div class="panel-header header-gradient-danger">
@@ -419,7 +457,7 @@
             <p class="subtitle">วิเคราะห์เฉพาะ: ค่าแรงงาน/ค่าจ้างเหมา, ค่าควบคุมงาน, ค่าขนส่ง/ยานพาหนะ, ค่าเบ็ดเตล็ด และค่าดำเนินการ</p>
           </div>
           <div class="deficit-total-badge">
-            <span>ยอดติดลบหน้างาน (ค่าเบ็ดเตล็ด):</span>
+            <span id="budgetTotalDeficitLabel">ยอดติดลบหน้างาน:</span>
             <strong id="budgetTotalDeficitSum">-38,550.56 ฿</strong>
           </div>
         </div>
@@ -428,12 +466,13 @@
             <table class="pea-table table-hover" id="siteBudgetTable">
               <thead>
                 <tr>
-                  <th>ลำดับ</th>
+                  <th style="width: 45px;" class="text-center">ลำดับ</th>
                   <th>หมวดค่าใช้จ่ายหน้างาน</th>
-                  <th>ค่าใช้จ่ายจริง (บาท)</th>
-                  <th>ผลต่างงบประมาณ (บาท)</th>
-                  <th>สัดส่วน</th>
-                  <th>สถานะการปิดงาน</th>
+                  <th class="text-right">ตามประมาณการ (บาท)</th>
+                  <th class="text-right">ค่าใช้จ่ายจริง (บาท)</th>
+                  <th class="text-right">ผลต่างงบประมาณ (บาท)</th>
+                  <th class="text-center" style="width: 80px;">สัดส่วน</th>
+                  <th class="text-center" style="width: 170px;">สถานะการปิดงาน</th>
                 </tr>
               </thead>
               <tbody id="siteBudgetTableBody">
@@ -463,12 +502,13 @@
             <table class="pea-table table-hover" id="materialBudgetTable">
               <thead>
                 <tr>
-                  <th>ลำดับ</th>
+                  <th style="width: 45px;" class="text-center">ลำดับ</th>
                   <th>หมวดพัสดุ</th>
-                  <th>ค่าใช้จ่ายจริง (บาท)</th>
-                  <th>ผลต่างงบประมาณ (บาท)</th>
-                  <th>สัดส่วน</th>
-                  <th>สถานะ</th>
+                  <th class="text-right">ตามประมาณการ (บาท)</th>
+                  <th class="text-right">ค่าใช้จ่ายจริง (บาท)</th>
+                  <th class="text-right">ผลต่างงบประมาณ (บาท)</th>
+                  <th class="text-center" style="width: 80px;">สัดส่วน</th>
+                  <th class="text-center" style="width: 170px;">สถานะ</th>
                 </tr>
               </thead>
               <tbody id="materialBudgetTableBody">
@@ -685,10 +725,11 @@
             <table class="pea-table table-sm">
               <thead>
                 <tr>
-                  <th>รหัส</th>
+                  <th style="width: 55px;" class="text-center">รหัส</th>
                   <th>หมวดค่าใช้จ่ายปันส่วน</th>
-                  <th>ค่าใช้จ่ายจริง (บาท)</th>
-                  <th>ผลต่างงบประมาณ (บาท)</th>
+                  <th class="text-right">ตามประมาณการ (บาท)</th>
+                  <th class="text-right">ค่าใช้จ่ายจริง (บาท)</th>
+                  <th class="text-right">ผลต่างงบประมาณ (บาท)</th>
                   <th>หมายเหตุ</th>
                 </tr>
               </thead>

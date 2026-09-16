@@ -410,6 +410,39 @@ function renderProjectUI() {
     document.getElementById("overallClosingBadge").textContent = "พร้อมปิดงาน (งบประมาณสมบูรณ์)";
   }
 
+  // Budget Disbursement Overview Banner (ภาพรวมการเบิกจ่ายงบประมาณโครงการ)
+  const allocBudget = b.allocated_budget !== undefined ? b.allocated_budget : (b.total_budget || 0);
+  const ctrlActual = b.controlled_actual !== undefined ? b.controlled_actual : (b.total_actual || 0);
+  const remBudget = (b.remaining_budget !== undefined && b.remaining_budget !== null) 
+    ? b.remaining_budget 
+    : (allocBudget - ctrlActual);
+  const disbRate = b.disbursement_rate_pct !== undefined 
+    ? b.disbursement_rate_pct 
+    : (allocBudget > 0 ? ((ctrlActual / allocBudget) * 100).toFixed(2) : 0);
+
+  const elAlloc = document.getElementById("projAllocatedBudgetVal");
+  const elCtrl = document.getElementById("projControlledActualVal");
+  const elRem = document.getElementById("projRemainingBudgetVal");
+  const elRate = document.getElementById("projDisbursementRateVal");
+  const elHint = document.getElementById("projRemainingBudgetHint");
+
+  if (elAlloc) elAlloc.textContent = `${formatMoney(allocBudget)} ฿`;
+  if (elCtrl) elCtrl.textContent = `${formatMoney(ctrlActual)} ฿`;
+  if (elRem) {
+    elRem.textContent = `${remBudget < 0 ? '-' : ''}${formatMoney(Math.abs(remBudget))} ฿`;
+    elRem.className = remBudget < 0 ? "budget-metric-val val-danger" : "budget-metric-val val-positive";
+  }
+  if (elRate) elRate.textContent = `${Number(disbRate).toFixed(2)}%`;
+  if (elHint) {
+    if (remBudget < 0) {
+      elHint.textContent = `(เบิกเกินงบจัดสรร ${formatMoney(Math.abs(remBudget))} ฿)`;
+      elHint.className = "metric-sub text-danger";
+    } else {
+      elHint.textContent = `(คงเหลือเบิกจ่ายได้อีก ${formatMoney(remBudget)} ฿)`;
+      elHint.className = "metric-sub text-success";
+    }
+  }
+
   // Focus specifically on site expenses (5 categories) as requested
   const siteNames = ["ค่าแรงงาน / ค่าจ้างเหมา", "ค่าควบคุมงาน", "ค่าขนส่ง / ยานพาหนะ", "ค่าเบ็ดเตล็ด", "ค่าดำเนินการ"];
   const cats = b.categories || [];
@@ -428,9 +461,10 @@ function renderProjectUI() {
   if (isSiteDeficit) {
     if (kpiBudgetTag) {
       kpiBudgetTag.className = "kpi-status-tag tag-danger";
-      kpiBudgetTag.textContent = `ติดลบ ${siteDeficitCount} หมวด (ค่าเบ็ดเตล็ด)`;
+      const defNames = siteDeficits.map(d => d.name).join(", ");
+      kpiBudgetTag.textContent = `ติดลบ ${siteDeficitCount} หมวด (${defNames})`;
     }
-    if (kpiBudgetDesc) kpiBudgetDesc.textContent = `ค่าใช้จ่ายหน้างานจริง ${formatMoney(siteTotalActual || 463033.14)} ฿ (งบคงเหลือรวม +${formatMoney(siteTotalDiff || 415764.86)} ฿)`;
+    if (kpiBudgetDesc) kpiBudgetDesc.textContent = `ค่าใช้จ่ายหน้างานจริง ${formatMoney(siteTotalActual)} ฿ (งบคงเหลือรวม ${siteTotalDiff >= 0 ? '+' : ''}${formatMoney(siteTotalDiff)} ฿)`;
   } else {
     if (kpiBudgetTag) {
       kpiBudgetTag.className = "kpi-status-tag tag-success";
@@ -499,7 +533,10 @@ function renderProjectUI() {
       checkItemBudget.className = "check-item";
       const icon = checkItemBudget.querySelector(".check-icon");
       if (icon) icon.innerHTML = '<i class="fa-solid fa-circle-xmark text-danger"></i>';
-      if (checkBudgetDesc) checkBudgetDesc.textContent = `พบหมวดค่าใช้จ่ายหน้างานติดลบ 1 หมวด: ค่าเบ็ดเตล็ด (-${formatMoney(siteTotalDeficit)} บาท) ต้องโอนงบจากค่าแรงงานหรือค่าดำเนินการมาชดเชย`;
+      if (checkBudgetDesc) {
+        const defDetails = siteDeficits.map(d => `${d.name} (-${formatMoney(Math.abs(d.diff))} บาท)`).join(", ");
+        checkBudgetDesc.textContent = `พบหมวดค่าใช้จ่ายหน้างานติดลบ ${siteDeficitCount} หมวด: ${defDetails} ต้องโอนงบมาชดเชย`;
+      }
       if (checkBudgetBadge) {
         checkBudgetBadge.className = "check-badge bg-danger";
         checkBudgetBadge.textContent = "ไม่ผ่าน";
@@ -564,9 +601,10 @@ function renderProjectUI() {
   const closingActionSummary = document.getElementById("closingActionSummary");
   if (closingActionSummary) {
     if (isSiteDeficit) {
+      const defDetails = siteDeficits.map(d => `[${d.name}] (-${formatMoney(Math.abs(d.diff))} บาท)`).join(", ");
       closingActionSummary.innerHTML = `
-        โครงการนี้ยังไม่สามารถปิดงานได้เนื่องจาก <strong>ค่าใช้จ่ายหน้างานในหมวด [ค่าเบ็ดเตล็ด] ติดลบ -${formatMoney(siteTotalDeficit)} บาท</strong> 
-        แต่ภาพรวมงบประมาณค่าใช้จ่ายหน้างานยังมีงบคงเหลือถึง +${formatMoney(siteTotalDiff)} บาท 
+        โครงการนี้ยังไม่สามารถปิดงานได้เนื่องจาก <strong>ค่าใช้จ่ายหน้างานในหมวด ${defDetails} ติดลบ</strong> 
+        แต่ภาพรวมงบประมาณค่าใช้จ่ายหน้างานยังมีงบคงเหลือถึง ${siteTotalDiff >= 0 ? '+' : ''}${formatMoney(siteTotalDiff)} บาท 
         ให้ดำเนินการโอนงบประมาณจากหมวดค่าใช้จ่ายหน้างานที่มีเงินเหลือ (เช่น ค่าแรงงาน/ค่าจ้างเหมา หรือ ค่าควบคุมงาน) มาชดเชย ${formatMoney(siteTotalDeficit)} บาท 
         และตรวจสอบรายการพัสดุที่ยังไม่ได้เบิก ${withdrawCount} รายการให้เรียบร้อยก่อนส่งเอกสาร กส.3
       `;
@@ -671,19 +709,21 @@ function renderBudgetChart() {
 function renderSiteBudgetTable() {
   const tbody = document.getElementById("siteBudgetTableBody");
   const tfoot = document.getElementById("siteBudgetTableFoot");
-  if (!tbody) return;
+  if (!tbody || !currentProject) return;
 
   const cats = currentProject.budget_summary.categories || [];
   const siteNames = ["ค่าแรงงาน / ค่าจ้างเหมา", "ค่าควบคุมงาน", "ค่าขนส่ง / ยานพาหนะ", "ค่าเบ็ดเตล็ด", "ค่าดำเนินการ"];
   const siteItems = cats.filter(c => siteNames.includes(c.name));
 
+  const totalEstimate = siteItems.reduce((acc, c) => acc + (c.estimate || 0), 0);
   const totalActual = siteItems.reduce((acc, c) => acc + c.actual, 0) || 1;
   const totalDiff = siteItems.reduce((acc, c) => acc + c.diff, 0);
   const deficitItem = siteItems.find(c => c.diff < 0);
 
   const totalDefSum = document.getElementById("budgetTotalDeficitSum");
   if (totalDefSum) {
-    totalDefSum.textContent = deficitItem ? `-${formatMoney(Math.abs(deficitItem.diff))} ฿` : "0.00 ฿";
+    const totalDef = siteItems.filter(c => c.diff < 0).reduce((sum, c) => sum + Math.abs(c.diff), 0);
+    totalDefSum.textContent = totalDef > 0 ? `-${formatMoney(totalDef)} ฿` : "0.00 ฿";
   }
 
   tbody.innerHTML = "";
@@ -694,6 +734,7 @@ function renderSiteBudgetTable() {
     tr.innerHTML = `
       <td class="text-center">${idx + 1}</td>
       <td><strong>${c.name}</strong></td>
+      <td class="text-right font-weight-bold">${formatMoney(c.estimate)}</td>
       <td class="text-right">${formatMoney(c.actual)}</td>
       <td class="text-right ${isNeg ? 'text-danger font-weight-bold' : 'text-success font-weight-bold'}">
         ${isNeg ? '-' : '+'}${formatMoney(Math.abs(c.diff))}
@@ -712,8 +753,11 @@ function renderSiteBudgetTable() {
     tfoot.innerHTML = `
       <tr class="table-secondary" style="border-top: 2px solid #cbd5e1; background: #f8fafc;">
         <td colspan="2" class="text-center"><strong>รวมค่าใช้จ่ายหน้างาน (เฉพาะที่ควบคุมงบฯ 5 หมวด)</strong></td>
+        <td class="text-right"><strong>${formatMoney(totalEstimate)} ฿</strong></td>
         <td class="text-right"><strong>${formatMoney(totalActual)} ฿</strong></td>
-        <td class="text-right text-success font-weight-bold"><strong>+${formatMoney(totalDiff)} ฿</strong></td>
+        <td class="text-right ${totalDiff < 0 ? 'text-danger font-weight-bold' : 'text-success font-weight-bold'}">
+          <strong>${totalDiff < 0 ? '-' : '+'}${formatMoney(Math.abs(totalDiff))} ฿</strong>
+        </td>
         <td class="text-center"><strong>100%</strong></td>
         <td class="text-center">
           <span class="pea-badge ${deficitItem ? 'badge-status' : 'badge-purple'}">
@@ -728,18 +772,19 @@ function renderSiteBudgetTable() {
 function renderMaterialBudgetTable() {
   const tbody = document.getElementById("materialBudgetTableBody");
   const tfoot = document.getElementById("materialBudgetTableFoot");
-  if (!tbody) return;
+  if (!tbody || !currentProject) return;
 
   const cats = currentProject.budget_summary.categories || [];
   const matNames = ["ค่าพัสดุ", "พัสดุเข้างาน"];
   const matItems = cats.filter(c => matNames.includes(c.name));
 
+  const totalEstimate = matItems.reduce((acc, c) => acc + (c.estimate || 0), 0);
   const totalActual = matItems.reduce((acc, c) => acc + c.actual, 0);
   const totalDiff = matItems.reduce((acc, c) => acc + c.diff, 0);
 
   const matSurplusBadge = document.getElementById("matSurplusBadge");
   if (matSurplusBadge) {
-    matSurplusBadge.textContent = `งบพัสดุคงเหลือ: +${formatMoney(totalDiff)} ฿`;
+    matSurplusBadge.textContent = `งบพัสดุคงเหลือ: ${totalDiff < 0 ? '-' : '+'}${formatMoney(Math.abs(totalDiff))} ฿`;
   }
 
   tbody.innerHTML = "";
@@ -749,6 +794,7 @@ function renderMaterialBudgetTable() {
     tr.innerHTML = `
       <td class="text-center">${idx + 1}</td>
       <td><strong>${c.name}</strong></td>
+      <td class="text-right font-weight-bold">${formatMoney(c.estimate)}</td>
       <td class="text-right">${formatMoney(c.actual)}</td>
       <td class="text-right ${isNeg ? 'text-danger font-weight-bold' : 'text-success font-weight-bold'}">
         ${isNeg ? '-' : '+'}${formatMoney(Math.abs(c.diff))}
@@ -767,10 +813,17 @@ function renderMaterialBudgetTable() {
     tfoot.innerHTML = `
       <tr class="table-secondary" style="border-top: 2px solid #cbd5e1; background: #f8fafc;">
         <td colspan="2" class="text-center"><strong>รวมหมวดพัสดุ</strong></td>
+        <td class="text-right"><strong>${formatMoney(totalEstimate)} ฿</strong></td>
         <td class="text-right"><strong>${formatMoney(totalActual)} ฿</strong></td>
-        <td class="text-right text-success font-weight-bold"><strong>+${formatMoney(totalDiff)} ฿</strong></td>
+        <td class="text-right ${totalDiff < 0 ? 'text-danger' : 'text-success'} font-weight-bold">
+          <strong>${totalDiff < 0 ? '-' : '+'}${formatMoney(Math.abs(totalDiff))} ฿</strong>
+        </td>
         <td class="text-center"><strong>100%</strong></td>
-        <td class="text-center"><span class="badge-status-pill bg-success">งบพัสดุเหลือสมบูรณ์</span></td>
+        <td class="text-center">
+          <span class="badge-status-pill ${totalDiff < 0 ? 'bg-danger' : 'bg-success'}">
+            ${totalDiff < 0 ? 'งบพัสดุติดลบ' : 'งบพัสดุเหลือสมบูรณ์'}
+          </span>
+        </td>
       </tr>
     `;
   }
@@ -806,6 +859,55 @@ function renderNetworksTable() {
   if (filterAllCount) filterAllCount.textContent = totalCount;
   if (filterDeficitCount) filterDeficitCount.textContent = deficitCount;
   if (filterReadyCount) filterReadyCount.textContent = readyCount;
+
+  // Update Network Root Cause Callout Alert dynamically
+  const networkAlertBox = document.getElementById("networkAlertBox");
+  const networkAlertDesc = document.getElementById("networkAlertDesc");
+  if (networkAlertBox && networkAlertDesc) {
+    if (deficitCount > 0) {
+      networkAlertBox.className = "network-alert-box mb-3";
+      networkAlertBox.style.display = "flex";
+      const iconEl = networkAlertBox.querySelector(".net-alert-icon");
+      if (iconEl) iconEl.innerHTML = '<i class="fa-solid fa-triangle-exclamation"></i>';
+
+      const defNets = nets.filter(n => n.has_deficit);
+      const defNetDetails = defNets.map(n => {
+        let issues = [];
+        if (n.site_deficits && n.site_deficits.length > 0) {
+          issues.push(n.site_deficits.map(d => `${d.name} (-${formatMoney(Math.abs(d.diff))} ฿)`).join(", "));
+        }
+        if (n.total_diff < 0) {
+          issues.push(`ผลต่างรวม (-${formatMoney(Math.abs(n.total_diff))} ฿)`);
+        }
+        return `<strong class="text-danger">โครงข่าย ${n.network_no} (${n.description || 'ไม่ระบุชื่อ'})</strong> [${issues.join("; ")}]`;
+      }).join(" และ ");
+
+      const b = currentProject.budget_summary || {};
+      const siteExpenseNames = ["ค่าแรงงาน / ค่าจ้างเหมา", "ค่าควบคุมงาน", "ค่าขนส่ง / ยานพาหนะ", "ค่าเบ็ดเตล็ด", "ค่าดำเนินการ"];
+      const siteDefCats = (b.categories || []).filter(c => siteExpenseNames.includes(c.name) && c.diff < 0);
+      let catDeficitText = "";
+      if (siteDefCats.length > 0) {
+        catDeficitText = `ยอดติดลบในหมวด${siteDefCats.map(c => `${c.name} (-${formatMoney(Math.abs(c.diff))} ฿)`).join(", ")} ของทั้งโครงการ เกิดขึ้นจาก `;
+      } else {
+        catDeficitText = `พบรายการติดลบในระดับโครงข่ายที่ `;
+      }
+
+      networkAlertDesc.innerHTML = `
+        ${catDeficitText}${defNetDetails} 
+        ในขณะที่โครงข่ายอื่นๆ อีก ${totalCount - deficitCount} โครงข่ายมีงบประมาณเหลือ 
+        จึงต้องดำเนินการเกลี่ย/โอนงบประมาณระหว่างหมวดและระหว่างโครงข่ายตามระเบียบ กส.3 ก่อนปิดงาน
+      `;
+    } else {
+      networkAlertBox.className = "network-alert-box alert-success mb-3";
+      networkAlertBox.style.display = "flex";
+      const iconEl = networkAlertBox.querySelector(".net-alert-icon");
+      if (iconEl) iconEl.innerHTML = '<i class="fa-solid fa-circle-check text-success"></i>';
+      networkAlertDesc.innerHTML = `
+        โครงข่ายทั้งหมด (${totalCount} โครงข่าย) มีงบประมาณค่าใช้จ่ายหน้างานเพียงพอและไม่มีหมวดค่าใช้จ่ายที่เกินวงเงิน 
+        พร้อมสำหรับการปิดงานทางด้านการเงิน
+      `;
+    }
+  }
 
   let displayNets = nets;
   if (currentNetworkFilter === "deficit") {
@@ -1689,7 +1791,7 @@ async function handleExportApprovalDocx() {
 
 function renderAllocatedBudgetTable() {
   const tbody = document.getElementById("allocatedBudgetTableBody");
-  if (!tbody) return;
+  if (!tbody || !currentProject) return;
 
   const cats = currentProject.budget_summary.categories || [];
   const allocNames = ["ค่าดอกเบี้ยฯ / ปันส่วน", "ค่าใช้จ่ายทางอ้อม", "ค่าใช้จ่ายอื่นๆ / จัดการ"];
@@ -1702,6 +1804,7 @@ function renderAllocatedBudgetTable() {
     tr.innerHTML = `
       <td>${c.id.toUpperCase()}</td>
       <td><strong>${c.name}</strong></td>
+      <td class="text-right font-weight-bold">${formatMoney(c.estimate)}</td>
       <td class="text-right">${formatMoney(c.actual)}</td>
       <td class="text-right ${isNeg ? 'text-danger font-weight-bold' : 'text-success font-weight-bold'}">
         ${isNeg ? '-' : '+'}${formatMoney(Math.abs(c.diff))}

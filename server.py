@@ -43,7 +43,9 @@ def clean_thai_text(text):
         'Ë': '\u0e4a',
         'Ì': '\u0e4b',
         'Í': '\u0e4c',
-        'ř': ' 1 ',
+        'ř': '1',
+        'Ŝ': '4',
+        'ŝ': '4',
         'ำ': 'ำ',
         'ํา': 'ำ',
         'ชหมายเลขงาน': ' หมายเลขงาน',
@@ -52,6 +54,7 @@ def clean_thai_text(text):
     }
     for k, v in replacements.items():
         text = text.replace(k, v)
+    text = text.replace("อ้อมน้อย1", "อ้อมน้อย 1")
     return text
 
 # ----------------- PARSER LOGIC -----------------
@@ -75,94 +78,121 @@ def get_col(x):
             return name
     return None
 
-def parse_network_table(doc):
-    networks = []
-    category_names = [
-        ("c1", "ค่าพัสดุ", "material"),
-        ("c2", "พัสดุเข้างาน", "material"),
-        ("c3", "ค่าแรงงาน / ค่าจ้างเหมา", "site"),
-        ("c4", "ค่าควบคุมงาน", "site"),
-        ("c5", "ค่าขนส่ง / ยานพาหนะ", "site"),
-        ("c6", "ค่าเบ็ดเตล็ด", "site"),
-        ("c7", "ค่าดำเนินการ", "site"),
-        ("c8", "บันทึกเวลา / ปันส่วน", "allocated"),
-        ("c9", "ค่าดอกเบี้ยฯ / ทางอ้อม", "allocated"),
-        ("c10", "ค่าใช้จ่ายทางอ้อม / อื่นๆ", "allocated"),
-        ("c_total", "รวมทั้งสิ้น", "total")
-    ]
-    
-    target_page_text = ""
-    for page in doc:
-        txt = page.get_text("text")
-        if re.search(r"\|\s*1\s*\|\s*\d{10}", txt):
-            target_page_text = txt
-            break
-            
-    if not target_page_text and len(doc) >= 5:
-        target_page_text = doc[4].get_text("text")
-        
-    if not target_page_text:
-        return networks
-
-    lines = [l.strip() for l in target_page_text.splitlines()]
-    i = 0
+def extract_numbers_until(lines, start_idx, stops):
+    nums = []
+    i = start_idx
     while i < len(lines):
         l = lines[i]
-        m = re.match(r"^\|\s*(\d+)\s*\|\s*(\d{10})\s*\|\s*([^\n\r\|]+)", l)
-        if m:
-            seq = int(m.group(1))
-            net_no = m.group(2)
-            net_desc = clean_thai_text(m.group(3).strip())
-            
-            i += 1
-            est_nums = []
-            while i < len(lines) and ("| ค่าจริง" not in lines[i] and "ค่าจริง" not in lines[i]):
-                val_str = lines[i].replace("|", "").strip()
-                if val_str:
-                    try:
-                        est_nums.append(float(val_str.replace(",", "")))
-                    except ValueError:
-                        pass
-                i += 1
-                
-            i += 1 # skip row header
-            act_nums = []
-            while i < len(lines) and ("| ผลต่าง" not in lines[i] and "ผลต่าง" not in lines[i]):
-                val_str = lines[i].replace("|", "").strip()
-                if val_str:
-                    try:
-                        act_nums.append(float(val_str.replace(",", "")))
-                    except ValueError:
-                        pass
-                i += 1
-                
-            i += 1 # skip row header
-            diff_nums = []
-            while i < len(lines):
-                if re.match(r"^\|\s*\d+\s*\|\s*\d{10}", lines[i]) or "รวมประมาณการ" in lines[i] or "_____" in lines[i]:
+        matched_stop = False
+        for stop in stops:
+            if stop.startswith('^'):
+                if re.match(stop, l):
+                    matched_stop = True
                     break
-                val_str = lines[i].replace("|", "").strip()
-                if val_str:
-                    is_neg = val_str.endswith("-")
-                    num_clean = val_str.replace("-", "").replace(",", "").strip()
-                    try:
-                        num = float(num_clean)
-                        if is_neg:
-                            num = -num
-                        diff_nums.append(num)
-                    except ValueError:
-                        pass
-                i += 1
+            else:
+                if stop in l:
+                    matched_stop = True
+                    break
+        if matched_stop:
+            break
+        val_str = l.replace('|', '').strip()
+        if val_str:
+            is_neg = val_str.endswith('-')
+            clean = val_str.replace('-', '').replace(',', '').strip()
+            try:
+                v = float(clean)
+                if is_neg:
+                    v = -v
+                nums.append(v)
+            except ValueError:
+                pass
+        i += 1
+    return nums, i
 
-            # Build category list
+def parse_network_table(doc, project_id=None):
+    networks = []
+    category_defs = [
+        ("c1", "ค่าพัสดุ", "material", "หมวดพัสดุ"),
+        ("c2", "พัสดุเข้างาน", "material", "หมวดพัสดุ"),
+        ("c3", "ค่าแรงงาน / ค่าจ้างเหมา", "site", "ค่าใช้จ่ายหน้างาน"),
+        ("c4", "ค่าควบคุมงาน", "site", "ค่าใช้จ่ายหน้างาน"),
+        ("c5", "ค่าขนส่ง / ยานพาหนะ", "site", "ค่าใช้จ่ายหน้างาน"),
+        ("c6", "ค่าเบ็ดเตล็ด", "site", "ค่าใช้จ่ายหน้างาน"),
+        ("c7", "ค่าดำเนินการ", "site", "ค่าใช้จ่ายหน้างาน"),
+        ("c8", "บันทึกเวลา / ปันส่วน", "allocated", "ค่าใช้จ่ายปันส่วนทางบัญชี"),
+        ("c9", "ค่าดอกเบี้ยฯ / ทางอ้อม", "allocated", "ค่าใช้จ่ายปันส่วนทางบัญชี"),
+        ("c10", "ค่าใช้จ่ายทางอ้อม / อื่นๆ", "allocated", "ค่าใช้จ่ายปันส่วนทางบัญชี"),
+    ]
+    
+    # Collect all lines from doc that belong to the network and summary table across all pages
+    combined_lines = []
+    capture = False
+    for page in doc:
+        txt = clean_thai_text(page.get_text("text"))
+        lines = [l.strip() for l in txt.splitlines() if l.strip()]
+        for l in lines:
+            if re.search(r"^\|\s*1\s*\|\s*\d{10}", l):
+                capture = True
+            if capture:
+                combined_lines.append(l)
+                if "3. รายละเอียดการปิดบัญชี" in l:
+                    capture = False
+                    break
+
+    # Fallback to single page search if marker was missed
+    if not combined_lines:
+        for page in doc:
+            txt = clean_thai_text(page.get_text("text"))
+            if re.search(r"\|\s*1\s*\|\s*\d{10}", txt):
+                combined_lines = [l.strip() for l in txt.splitlines() if l.strip()]
+                break
+        if not combined_lines and len(doc) >= 5:
+            combined_lines = [l.strip() for l in clean_thai_text(doc[4].get_text("text")).splitlines() if l.strip()]
+
+    i = 0
+    seen_net_keys = set()
+    while i < len(combined_lines):
+        l = combined_lines[i]
+        m = re.match(r"^\|\s*(\d+)\s*\|\s*(\d{10})\s*\|\s*([^\n\r\|]+)", l)
+        m_wbs = None
+        if not m and project_id:
+            m_wbs = re.match(r"^\|\s*(" + re.escape(project_id) + r")\s*$", l)
+        elif not m:
+            m_wbs = re.match(r"^\|\s*([A-Za-z0-9\.\-_]{12,})\s*$", l)
+
+        if m or m_wbs:
+            seq = int(m.group(1)) if m else (len(networks) + 1)
+            net_no = m.group(2) if m else m_wbs.group(1).strip()
+            net_desc = clean_thai_text(m.group(3).strip()) if m else "ค่าใช้จ่ายตรงระดับ WBS (ไม่ระบุโครงข่าย)"
+
+            net_key = (seq, net_no)
+            if net_key in seen_net_keys:
+                i += 1
+                continue
+            seen_net_keys.add(net_key)
+
+            i += 1
+            est_nums, i = extract_numbers_until(combined_lines, i, ["ค่าจริง", "| ค่าจริง"])
+            i += 1
+            act_nums, i = extract_numbers_until(combined_lines, i, ["ผลต่าง", "| ผลต่าง"])
+            i += 1
+            diff_stops = [
+                r"^\|\s*\d+\s*\|\s*\d{10}",
+                "รวมประมาณการ", "รวมค่าจริง", "รวมผลต่าง", "_____", "3. รายละเอียด"
+            ]
+            if project_id:
+                diff_stops.insert(1, r"^\|\s*" + re.escape(project_id))
+            diff_nums, i = extract_numbers_until(combined_lines, i, diff_stops)
+
             cats = []
             site_cats = []
             for c_idx in range(min(10, len(est_nums), len(act_nums), len(diff_nums))):
-                cid, cname, cgrp = category_names[c_idx]
+                cid, cname, cgrp, cgrp_name = category_defs[c_idx]
                 c_data = {
                     "id": cid,
                     "name": cname,
                     "group": cgrp,
+                    "group_name": cgrp_name,
                     "estimate": round(est_nums[c_idx], 2),
                     "actual": round(act_nums[c_idx], 2),
                     "diff": round(diff_nums[c_idx], 2),
@@ -174,19 +204,18 @@ def parse_network_table(doc):
 
             site_deficits = [c for c in site_cats if c["diff"] < 0]
             site_surpluses = [c for c in site_cats if c["diff"] > 0]
-            
-            tot_est = est_nums[-1] if est_nums else 0.0
-            tot_act = act_nums[-1] if act_nums else 0.0
-            tot_diff = diff_nums[-1] if diff_nums else 0.0
-            
+
+            tot_est = est_nums[-1] if est_nums else sum(c["estimate"] for c in cats)
+            tot_act = act_nums[-1] if act_nums else sum(c["actual"] for c in cats)
+            tot_diff = diff_nums[-1] if diff_nums else sum(c["diff"] for c in cats)
+
             site_est = sum(c["estimate"] for c in site_cats)
             site_act = sum(c["actual"] for c in site_cats)
             site_dif = sum(c["diff"] for c in site_cats)
-            
-            # Identify status
+
             has_deficit = (tot_diff < 0) or (len(site_deficits) > 0)
             status_text = "DEFICIT" if has_deficit else "READY"
-            
+
             notes = []
             if tot_diff < 0:
                 notes.append(f"งบรวมโครงข่ายติดลบ {tot_diff:,.2f} ฿")
@@ -216,8 +245,37 @@ def parse_network_table(doc):
             networks.append(net_obj)
             continue
         i += 1
-        
-    return networks
+
+    # Dynamic parse of รวมประมาณการ, รวมค่าจริง, รวมผลต่าง
+    def extract_summary_line(marker):
+        for idx, line in enumerate(combined_lines):
+            if marker in line:
+                nums, _ = extract_numbers_until(combined_lines, idx + 1, ["รวมค่าจริง", "รวมผลต่าง", "_____", "3. รายละเอียด"])
+                return nums
+        return []
+
+    summary_est = extract_summary_line("รวมประมาณการ")
+    summary_act = extract_summary_line("รวมค่าจริง")
+    summary_diff = extract_summary_line("รวมผลต่าง")
+
+    cost_categories = []
+    for idx in range(10):
+        cid, cname, cgrp, cgrp_name = category_defs[idx]
+        e = summary_est[idx] if idx < len(summary_est) else 0.0
+        a = summary_act[idx] if idx < len(summary_act) else 0.0
+        d = summary_diff[idx] if idx < len(summary_diff) else round(e - a, 2)
+        cost_categories.append({
+            "id": cid,
+            "name": cname,
+            "group": cgrp,
+            "group_name": cgrp_name,
+            "estimate": round(e, 2),
+            "actual": round(a, 2),
+            "diff": round(d, 2),
+            "is_deficit": d < 0
+        })
+
+    return networks, cost_categories
 
 def generate_smart_network_transfers(networks, is_omns=False):
     """
@@ -526,7 +584,7 @@ def parse_pdf_data(pdf_bytes_or_path):
     # Parse Project Name
     title_match = re.search(r"ชื[่É\s]*องาน\s*(?:งาน)?\s*([^\n\r]+?)(?=\s*[ก-ฮa-zA-Z]?หมายเลขงาน|\s*REL|\s*C1|\n|$)", full_text)
     if title_match:
-        raw_name = title_match.group(1).replace("(", "").replace("ř", "1").strip()
+        raw_name = title_match.group(1).replace("ř", "1").replace("Ŝ", "4").replace("ŝ", "4").strip()
         # Clean double words like 'งานก่อสร้างระบบไฟฟ้าภายในสฟฟ.อ้อมน้อย 1'
         if raw_name.startswith("งาน") and raw_name.count("งาน") > 1:
             project_name = re.sub(r"^งาน\s*", "", raw_name)
@@ -560,13 +618,18 @@ def parse_pdf_data(pdf_bytes_or_path):
     if date_match:
         print_date = date_match.group(1).strip()
 
-    # Parse Materials (Pages 1 to 5)
+    # Parse Materials across all pages until network table begins
     materials = []
     current_section = ""
-    page_limit = min(5, len(doc))
+    stop_materials = False
 
-    for page_idx in range(page_limit):
-        page = doc[page_idx]
+    for page_idx, page in enumerate(doc):
+        if stop_materials:
+            break
+        txt = page.get_text("text")
+        if re.search(r"\|\s*1\s*\|\s*\d{10}", txt):
+            stop_materials = True
+
         words = page.get_text("words")
         
         # Check section headers
@@ -639,43 +702,22 @@ def parse_pdf_data(pdf_bytes_or_path):
 
             materials.append(item)
 
-    # 10 Cost categories in PEA SAP with Groups:
-    cost_categories = [
-        {"id": "c1", "name": "ค่าพัสดุ", "actual": 892151.17, "diff": 1037380.31, "group": "material", "group_name": "หมวดพัสดุ"},
-        {"id": "c2", "name": "พัสดุเข้างาน", "actual": 0.00, "diff": 48018.36, "group": "material", "group_name": "หมวดพัสดุ"},
-        {"id": "c3", "name": "ค่าแรงงาน / ค่าจ้างเหมา", "actual": 270716.36, "diff": 163362.64, "group": "site", "group_name": "ค่าใช้จ่ายหน้างาน"},
-        {"id": "c4", "name": "ค่าควบคุมงาน", "actual": 27278.21, "diff": 102945.79, "group": "site", "group_name": "ค่าใช้จ่ายหน้างาน"},
-        {"id": "c5", "name": "ค่าขนส่ง / ยานพาหนะ", "actual": 194.01, "diff": 76170.99, "group": "site", "group_name": "ค่าใช้จ่ายหน้างาน"},
-        {"id": "c6", "name": "ค่าเบ็ดเตล็ด", "actual": 164844.56, "diff": -38550.56, "group": "site", "group_name": "ค่าใช้จ่ายหน้างาน"},
-        {"id": "c7", "name": "ค่าดำเนินการ", "actual": 0.00, "diff": 111836.00, "group": "site", "group_name": "ค่าใช้จ่ายหน้างาน"},
-        {"id": "c8", "name": "ค่าดอกเบี้ยฯ / ปันส่วน", "actual": 15353.45, "diff": -15353.45, "group": "allocated", "group_name": "ค่าใช้จ่ายปันส่วนทางบัญชี"},
-        {"id": "c9", "name": "ค่าใช้จ่ายทางอ้อม", "actual": 104134.95, "diff": -104134.95, "group": "allocated", "group_name": "ค่าใช้จ่ายปันส่วนทางบัญชี"},
-        {"id": "c10", "name": "ค่าใช้จ่ายอื่นๆ / จัดการ", "actual": 123843.14, "diff": 119798.19, "group": "allocated", "group_name": "ค่าใช้จ่ายปันส่วนทางบัญชี"},
-    ]
+    # Networks Analysis & Dynamic 10-Category Financial Parsing
+    networks, cost_categories = parse_network_table(doc, project_id=project_id)
 
-    # Attempt dynamic parsing from Page 6 if present
-    if len(doc) >= 6:
-        p6_text = clean_thai_text(doc[5].get_text("text"))
-        diff_match = re.search(r"รวมผลต่าง\s*\|\s*([\d,\.\-\s\|]+)", p6_text)
-        if diff_match:
-            raw_nums = diff_match.group(1).replace("\n", " ").split("|")
-            parsed_diffs = []
-            for n in raw_nums:
-                clean_n = n.strip()
-                if not clean_n:
-                    continue
-                is_neg = clean_n.endswith("-")
-                num_part = clean_n.replace("-", "").replace(",", "").strip()
-                try:
-                    val = float(num_part)
-                    if is_neg:
-                        val = -val
-                    parsed_diffs.append(val)
-                except ValueError:
-                    pass
-            if len(parsed_diffs) >= 10:
-                for idx, cat in enumerate(cost_categories):
-                    cat["diff"] = parsed_diffs[idx]
+    # Dynamic Parse of Project-level Budget Allocation & Disbursement
+    bud_match = re.search(r"ได้รับจัดสรรงบประมาณจำนวน\s*([\d,]+\.?\d*)\s*บาท.*?ค่าใช้จ่ายจริง.*?(?:จำนวน)?\s*([\d,]+\.?\d*)\s*บาท.*?งบประมาณคงเหลือ\s*([\d,\-]+(?:\.\d+)?)", full_text, re.DOTALL)
+    if bud_match:
+        allocated_budget = float(bud_match.group(1).replace(",", ""))
+        controlled_actual = float(bud_match.group(2).replace(",", ""))
+        remaining_budget = float(bud_match.group(3).replace(",", ""))
+    else:
+        site_cats = [c for c in cost_categories if c["group"] == "site"]
+        allocated_budget = sum(c["estimate"] for c in site_cats)
+        controlled_actual = sum(c["actual"] for c in site_cats)
+        remaining_budget = sum(c["diff"] for c in site_cats)
+
+    disbursement_rate_pct = round((controlled_actual / allocated_budget) * 100, 2) if allocated_budget > 0 else 0.0
 
     # Group-based Analysis
     site_items = [c for c in cost_categories if c["group"] == "site"]
@@ -687,12 +729,14 @@ def parse_pdf_data(pdf_bytes_or_path):
     site_surpluses = [c for c in site_items if c["diff"] > 0]
     site_surpluses.sort(key=lambda x: x["diff"], reverse=True)
 
+    site_total_estimate = sum(c["estimate"] for c in site_items)
     site_total_actual = sum(c["actual"] for c in site_items)
     site_total_diff = sum(c["diff"] for c in site_items)
     site_total_deficit = sum(abs(c["diff"]) for c in site_deficits)
     site_total_surplus = sum(c["diff"] for c in site_surpluses)
 
     # Material Totals
+    mat_total_estimate = sum(c["estimate"] for c in material_items)
     mat_total_actual = sum(c["actual"] for c in material_items)
     mat_total_diff = sum(c["diff"] for c in material_items)
 
@@ -755,7 +799,6 @@ def parse_pdf_data(pdf_bytes_or_path):
             })
 
     # Networks Analysis (วิเคราะห์การเงินตามเลขที่โครงข่าย)
-    networks = parse_network_table(doc)
     network_deficits = [n for n in networks if n.get("has_deficit")]
     network_surpluses = [n for n in networks if not n.get("has_deficit")]
     network_surpluses.sort(key=lambda x: x.get("total_diff", 0), reverse=True)
@@ -788,9 +831,14 @@ def parse_pdf_data(pdf_bytes_or_path):
         },
         "budget_summary": {
             "focus": "site_expenses", # Focusing specifically on site construction expenses
+            "allocated_budget": round(allocated_budget, 2),
+            "controlled_actual": round(controlled_actual, 2),
+            "remaining_budget": round(remaining_budget, 2),
+            "disbursement_rate_pct": round(disbursement_rate_pct, 2),
             "site_expenses": {
                 "title": "ค่าใช้จ่ายหน้างาน (เฉพาะที่ควบคุมงบฯ 5 หมวด)",
-                "allocated": 463033.14,
+                "allocated": round(allocated_budget, 2),
+                "estimate_total": round(site_total_estimate, 2),
                 "actual_total": round(site_total_actual, 2),
                 "diff_total": round(site_total_diff, 2),
                 "total_deficit": round(site_total_deficit, 2),
@@ -803,6 +851,7 @@ def parse_pdf_data(pdf_bytes_or_path):
             },
             "materials": {
                 "title": "หมวดพัสดุและพัสดุเข้างาน",
+                "estimate_total": round(mat_total_estimate, 2),
                 "actual_total": round(mat_total_actual, 2),
                 "diff_total": round(mat_total_diff, 2),
                 "items": material_items
@@ -857,10 +906,9 @@ def save_projects(projects):
         print(f"Notice: Cannot persist to {PROJECTS_FILE} ({e}). Running in memory/client storage mode.")
 
 ALT_SAMPLE_PATH = r"C:\Users\500744\OneDrive - pea.co.th\Desktop\018.pdf"
+SAMPLE_SK_PATH = r"C:\Users\500744\OneDrive - pea.co.th\Desktop\018_สมุทรสาคร 14(ช).pdf"
 
 def init_default_project(force=False):
-    if not force and os.path.exists(PROJECTS_FILE):
-        return
     projects = load_projects()
     modified = False
 
@@ -900,6 +948,25 @@ def init_default_project(force=False):
                 modified = True
         except Exception as e:
             print("Error parsing default sample 2 (018.pdf):", e)
+
+    # 3. Ensure sample project 3 (018_สมุทรสาคร 14(ช).pdf) exists
+    has_sample3 = any(p["id"] == "I-68-I-KKHXX.IS.1007" for p in projects)
+    if (force or not has_sample3) and os.path.exists(SAMPLE_SK_PATH):
+        try:
+            sample3 = parse_pdf_data(SAMPLE_SK_PATH)
+            if sample3.get("success"):
+                sample3["name"] = "งานก่อสร้างสฟฟ.สค. 14(ช)"
+                sample3["target_month"] = "กันยายน 2569"
+                sample3["target_year_be"] = 2569
+                sample3["target_month_num"] = 9
+                if has_sample3:
+                    idx = next(i for i, p in enumerate(projects) if p["id"] == sample3["id"])
+                    projects[idx] = sample3
+                else:
+                    projects.insert(0, sample3)
+                modified = True
+        except Exception as e:
+            print("Error parsing sample 3 (สมุทรสาคร 14(ช)):", e)
 
     if modified or not os.path.exists(PROJECTS_FILE):
         save_projects(projects)
