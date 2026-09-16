@@ -298,7 +298,25 @@ function saveProjectsToCache(projects) {
 }
 
 async function loadProjectsFromServer() {
-  // 1. Check local cache first so user's uploaded projects persist across sessions
+  // 1. Fetch fresh projects from server API first
+  try {
+    const response = await fetch("/api/projects");
+    if (response.ok) {
+      const serverProjects = await response.json();
+      if (Array.isArray(serverProjects) && serverProjects.length > 0) {
+        allProjects = serverProjects;
+        saveProjectsToCache(allProjects);
+        populateProjectSelect();
+        setCurrentProject(allProjects[0]);
+        renderProjectsCardsAndDirectory();
+        return;
+      }
+    }
+  } catch (err) {
+    console.warn("Server unavailable or offline mode, checking local cache...", err);
+  }
+
+  // 2. Fallback to local cache if server is offline
   const cached = getCachedProjects();
   if (cached && cached.length > 0) {
     allProjects = cached;
@@ -308,27 +326,9 @@ async function loadProjectsFromServer() {
     return;
   }
 
-  // 2. Fetch default projects from server API
-  try {
-    const response = await fetch("/api/projects");
-    if (response.ok) {
-      allProjects = await response.json();
-      if (allProjects.length > 0) {
-        saveProjectsToCache(allProjects);
-        populateProjectSelect();
-        setCurrentProject(allProjects[0]);
-        renderProjectsCardsAndDirectory();
-        return;
-      }
-    }
-    console.warn("Could not fetch projects from server, trying sample project...");
-    await loadSampleProject();
-    renderProjectsCardsAndDirectory();
-  } catch (err) {
-    console.warn("Server unavailable or offline mode, attempting fallback...", err);
-    await loadSampleProject();
-    renderProjectsCardsAndDirectory();
-  }
+  // 3. Fallback to sample project
+  await loadSampleProject();
+  renderProjectsCardsAndDirectory();
 }
 
 async function loadSampleProject() {
@@ -1198,40 +1198,57 @@ function renderTransferRecommendations() {
       const supervision = cats.find(c => c.name.includes("ควบคุมงาน")) || { diff: 0, name: "ค่าควบคุมงาน" };
       const operation = cats.find(c => c.name.includes("ดำเนินการ")) || { diff: 0, name: "ค่าดำเนินการ" };
 
-      if (labor.diff > 0) {
-        plans.push({
-          title: "แผนที่ 1: โอนภายในหมวดค่าแรงงาน (แนะนำสูงสุด)",
-          tag: "แนะนำ", tagClass: "bg-success",
-          from: labor.name, fromGroup: "ค่าใช้จ่ายหน้างาน", fromNetwork: "รวม",
-          fromRemain: Math.max(0, labor.diff - defAmount),
-          to: "ค่าเบ็ดเตล็ด", toGroup: "ค่าใช้จ่ายหน้างาน", toNetwork: "รวม",
-          amount: Math.min(labor.diff, defAmount),
-          reason: `โอนจากหมวด${labor.name} ซึ่งมีงบคงเหลือ ${formatMoney(labor.diff)} ฿ ชดเชยยอดติดลบ`
-        });
+      const roundNeeded = Math.ceil(defAmount / 100) * 100;
+
+      if (labor.diff > 1000) {
+        const maxLabor = Math.max(0, labor.diff - 1000);
+        const capLabor = Math.floor(maxLabor / 100) * 100;
+        const amt = Math.min(roundNeeded, capLabor);
+        if (amt > 0) {
+          plans.push({
+            title: "แผนที่ 1: โอนภายในหมวดค่าแรงงาน (แนะนำสูงสุด)",
+            tag: "แนะนำ", tagClass: "bg-success",
+            from: labor.name, fromGroup: "ค่าใช้จ่ายหน้างาน", fromNetwork: "รวม",
+            fromRemain: labor.diff - amt,
+            to: "ค่าเบ็ดเตล็ด", toGroup: "ค่าใช้จ่ายหน้างาน", toNetwork: "รวม",
+            amount: amt,
+            reason: `โอนจากหมวด${labor.name} ซึ่งมีงบคงเหลือ ${formatMoney(labor.diff)} ฿ ชดเชยยอดติดลบ (คงเหลือติดหมวด ${formatMoney(labor.diff - amt)} ฿)`
+          });
+        }
       }
-      if (supervision.diff > 0) {
-        plans.push({
-          title: "แผนที่ 2: โอนจากหมวดค่าควบคุมงาน",
-          tag: "ทางเลือก", tagClass: "bg-info",
-          from: supervision.name, fromGroup: "ค่าใช้จ่ายหน้างาน", fromNetwork: "รวม",
-          fromRemain: Math.max(0, supervision.diff - defAmount),
-          to: "ค่าเบ็ดเตล็ด", toGroup: "ค่าใช้จ่ายหน้างาน", toNetwork: "รวม",
-          amount: Math.min(supervision.diff, defAmount),
-          reason: `โอนจากหมวด${supervision.name} ซึ่งมีงบคงเหลือ ${formatMoney(supervision.diff)} ฿`
-        });
+      if (supervision.diff > 1000) {
+        const maxSup = Math.max(0, supervision.diff - 1000);
+        const capSup = Math.floor(maxSup / 100) * 100;
+        const amt = Math.min(roundNeeded, capSup);
+        if (amt > 0) {
+          plans.push({
+            title: "แผนที่ 2: โอนจากหมวดค่าควบคุมงาน",
+            tag: "ทางเลือก", tagClass: "bg-info",
+            from: supervision.name, fromGroup: "ค่าใช้จ่ายหน้างาน", fromNetwork: "รวม",
+            fromRemain: supervision.diff - amt,
+            to: "ค่าเบ็ดเตล็ด", toGroup: "ค่าใช้จ่ายหน้างาน", toNetwork: "รวม",
+            amount: amt,
+            reason: `โอนจากหมวด${supervision.name} ซึ่งมีงบคงเหลือ ${formatMoney(supervision.diff)} ฿ (คงเหลือติดหมวด ${formatMoney(supervision.diff - amt)} ฿)`
+          });
+        }
       }
       // Operation cost is strictly LAST RESORT: only if regular site costs cannot cover the deficit
       const regularSurplus = (labor.diff > 0 ? labor.diff : 0) + (supervision.diff > 0 ? supervision.diff : 0);
-      if (regularSurplus < defAmount && operation.diff > 0) {
-        plans.push({
-          title: "แผนสำรอง: โอนจากหมวดค่าดำเนินการ (หมวดอื่นไม่พอใช้)",
-          tag: "หมวดสำรอง", tagClass: "bg-warning",
-          from: operation.name, fromGroup: "ค่าใช้จ่ายหน้างาน", fromNetwork: "รวม",
-          fromRemain: Math.max(0, operation.diff - defAmount),
-          to: "ค่าเบ็ดเตล็ด", toGroup: "ค่าใช้จ่ายหน้างาน", toNetwork: "รวม",
-          amount: defAmount,
-          reason: `เนื่องจากหมวดค่าใช้จ่ายหน้างานอื่นไม่เพียงพอ จึงจำเป็นต้องโอนจากหมวด${operation.name} (คงเหลือ ${formatMoney(operation.diff)} ฿)`
-        });
+      if (regularSurplus < defAmount && operation.diff > 1000) {
+        const maxOp = Math.max(0, operation.diff - 1000);
+        const capOp = Math.floor(maxOp / 100) * 100;
+        const amt = Math.min(roundNeeded, capOp);
+        if (amt > 0) {
+          plans.push({
+            title: "แผนสำรอง: โอนจากหมวดค่าดำเนินการ (หมวดอื่นไม่พอใช้)",
+            tag: "หมวดสำรอง", tagClass: "bg-warning",
+            from: operation.name, fromGroup: "ค่าใช้จ่ายหน้างาน", fromNetwork: "รวม",
+            fromRemain: operation.diff - amt,
+            to: "ค่าเบ็ดเตล็ด", toGroup: "ค่าใช้จ่ายหน้างาน", toNetwork: "รวม",
+            amount: amt,
+            reason: `เนื่องจากหมวดค่าใช้จ่ายหน้างานอื่นไม่เพียงพอ จึงจำเป็นต้องโอนจากหมวด${operation.name} (คงเหลือ ${formatMoney(operation.diff)} ฿) (คงเหลือติดหมวด ${formatMoney(operation.diff - amt)} ฿)`
+          });
+        }
       }
     }
   }
@@ -1349,20 +1366,26 @@ function renderSimulationTable() {
     const defItem = siteItems.find(c => c.diff < 0);
     if (defItem) {
       const defAmount = Math.abs(defItem.diff);
-      const donor = siteItems.find(c => c.name.includes("แรงงาน") && c.diff > 0) || siteItems.find(c => c.diff > 0);
+      const donor = siteItems.find(c => c.name.includes("แรงงาน") && c.diff > 1000) || siteItems.find(c => c.diff > 1000);
       if (donor) {
-        transferRows.push({
-          type: "ภายในหมวด",
-          typeClass: "bg-info",
-          fromNetwork: "รวมทุกโครงข่าย",
-          fromNetworkDesc: "",
-          fromCategory: donor.name,
-          toNetwork: "รวมทุกโครงข่าย",
-          toNetworkDesc: "",
-          toCategory: defItem.name,
-          amount: defAmount,
-          reason: `โอนจาก ${donor.name} (คงเหลือ ${formatMoney(donor.diff)} ฿) มาชดเชย ${defItem.name} (ติดลบ ${formatMoney(defItem.diff)} ฿)`
-        });
+        const maxTrans = Math.max(0, donor.diff - 1000);
+        const cap100 = Math.floor(maxTrans / 100) * 100;
+        const roundNeed = Math.ceil(defAmount / 100) * 100;
+        const amt = Math.min(roundNeed, cap100);
+        if (amt > 0) {
+          transferRows.push({
+            type: "ภายในหมวด",
+            typeClass: "bg-info",
+            fromNetwork: "รวมทุกโครงข่าย",
+            fromNetworkDesc: "",
+            fromCategory: donor.name,
+            toNetwork: "รวมทุกโครงข่าย",
+            toNetworkDesc: "",
+            toCategory: defItem.name,
+            amount: amt,
+            reason: `โอนจาก ${donor.name} (คงเหลือ ${formatMoney(donor.diff)} ฿) มาชดเชย ${defItem.name} (ติดลบ ${formatMoney(defItem.diff)} ฿) (คงเหลือติดหมวด ${formatMoney(donor.diff - amt)} ฿)`
+          });
+        }
       }
     }
   }

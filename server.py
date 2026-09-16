@@ -5,6 +5,7 @@ import json
 import re
 import urllib.parse
 from datetime import datetime
+import math
 
 import approval_form_docx
 
@@ -409,7 +410,7 @@ def generate_smart_network_transfers(networks, is_omns=False):
         for cname in ["ค่าแรงงาน / ค่าจ้างเหมา", "ค่าควบคุมงาน", "ค่าขนส่ง / ยานพาหนะ", "ค่าดำเนินการ"]:
             if cname != target_cat:
                 avail = running_diffs.get((net_no, cname), 0.0)
-                if avail > 0:
+                if avail > 1000.0:
                     intra_candidates.append((cname, avail))
         intra_candidates.sort(key=lambda x: x[1], reverse=True)
 
@@ -417,15 +418,13 @@ def generate_smart_network_transfers(networks, is_omns=False):
             if needed <= 0:
                 break
             current_avail = running_diffs.get((net_no, donor_cat), 0.0)
-            if current_avail <= 0:
+            max_transferable = max(0.0, current_avail - 1000.0)
+            donor_cap_100 = math.floor(max_transferable / 100.0) * 100.0
+            if donor_cap_100 <= 0:
                 continue
 
-            round_needed = math.ceil(needed / 1000.0) * 1000.0
-            if round_needed > current_avail:
-                transfer_amt = min(needed, current_avail)
-            else:
-                transfer_amt = round_needed
-            transfer_amt = round(min(transfer_amt, current_avail), 2)
+            round_needed = math.ceil(needed / 100.0) * 100.0
+            transfer_amt = min(round_needed, donor_cap_100)
             if transfer_amt <= 0:
                 continue
 
@@ -454,14 +453,14 @@ def generate_smart_network_transfers(networks, is_omns=False):
                 "initial_estimate": init_est,
                 "amount": transfer_amt,
                 "new_estimate": new_est,
-                "reason": f"อนุมัติให้โอนงบ{donor_cat} {target_desc} จำนวน {transfer_amt:,.2f} บาท ไปเป็น{target_cat} {target_desc} ซึ่งเมื่อโอนงบค่าใช้จ่ายในครั้งนี้แล้วงบ{target_cat} เพิ่มขึ้น เป็นเงิน ({init_est:,.2f} + {transfer_amt:,.2f}) = {new_est:,.2f} บาท"
+                "reason": f"อนุมัติให้โอนงบ{donor_cat} {target_desc} จำนวน {transfer_amt:,.2f} บาท ไปเป็น{target_cat} {target_desc} ซึ่งเมื่อโอนงบค่าใช้จ่ายในครั้งนี้แล้วงบ{target_cat} เพิ่มขึ้น เป็นเงิน ({init_est:,.2f} + {transfer_amt:,.2f}) = {new_est:,.2f} บาท (คงเหลือติดหมวด {running_diffs[(net_no, donor_cat)]:,.2f} บาท)"
             })
 
         # 2. INTER-network candidates if deficit still remains
         if needed > 0:
             inter_candidates = []
             for (other_net_no, other_cat), avail in running_diffs.items():
-                if other_net_no != net_no and avail > 0:
+                if other_net_no != net_no and avail > 1000.0:
                     inter_candidates.append((other_net_no, other_cat, avail))
             inter_candidates.sort(key=lambda x: x[2], reverse=True)
 
@@ -469,15 +468,14 @@ def generate_smart_network_transfers(networks, is_omns=False):
                 if needed <= 0:
                     break
                 current_avail = running_diffs.get((donor_net_no, donor_cat), 0.0)
-                if current_avail <= 0:
+                donor_net_total = sum(running_diffs.get((donor_net_no, cname), 0.0) for (n_no, cname) in running_diffs if n_no == donor_net_no)
+                max_transferable = min(max(0.0, current_avail - 1000.0), max(0.0, donor_net_total - 1000.0))
+                donor_cap_100 = math.floor(max_transferable / 100.0) * 100.0
+                if donor_cap_100 <= 0:
                     continue
 
-                round_needed = math.ceil(needed / 1000.0) * 1000.0
-                if round_needed > current_avail:
-                    transfer_amt = min(needed, current_avail)
-                else:
-                    transfer_amt = round_needed
-                transfer_amt = round(min(transfer_amt, current_avail), 2)
+                round_needed = math.ceil(needed / 100.0) * 100.0
+                transfer_amt = min(round_needed, donor_cap_100)
                 if transfer_amt <= 0:
                     continue
 
@@ -509,7 +507,7 @@ def generate_smart_network_transfers(networks, is_omns=False):
                     "initial_estimate": init_est,
                     "amount": transfer_amt,
                     "new_estimate": new_est,
-                    "reason": f"อนุมัติให้โอนงบ{donor_cat} {donor_desc} จำนวน {transfer_amt:,.2f} บาท ไปเป็น{target_cat} {target_desc} ซึ่งเมื่อโอนงบค่าใช้จ่ายในครั้งนี้แล้วงบ{target_cat} เพิ่มขึ้น เป็นเงิน ({init_est:,.2f} + {transfer_amt:,.2f}) = {new_est:,.2f} บาท"
+                    "reason": f"อนุมัติให้โอนงบ{donor_cat} {donor_desc} จำนวน {transfer_amt:,.2f} บาท ไปเป็น{target_cat} {target_desc} ซึ่งเมื่อโอนงบค่าใช้จ่ายในครั้งนี้แล้วงบ{target_cat} เพิ่มขึ้น เป็นเงิน ({init_est:,.2f} + {transfer_amt:,.2f}) = {new_est:,.2f} บาท (คงเหลือติดหมวด {running_diffs[(donor_net_no, donor_cat)]:,.2f} บาท)"
                 })
 
     return recommendations
@@ -756,47 +754,60 @@ def parse_pdf_data(pdf_bytes_or_path):
     site_transfer_recommendations = []
     for def_item in site_deficits:
         amount_needed = abs(def_item["diff"])
+        round_needed = math.ceil(amount_needed / 100.0) * 100.0
         
         # Option 1: Primary regular site donor (e.g. ค่าแรงงาน / ค่าจ้างเหมา or ค่าควบคุมงาน)
         if regular_site_donors:
             best_site_donor = regular_site_donors[0]
-            site_transfer_recommendations.append({
-                "option_title": "แผนที่ 1: โอนภายในค่าใช้จ่ายหน้างานทั่วไป (แนะนำสูงสุด)",
-                "from_category": best_site_donor["name"],
-                "from_group": "ค่าใช้จ่ายหน้างาน",
-                "to_category": def_item["name"],
-                "to_group": "ค่าใช้จ่ายหน้างาน",
-                "amount": round(min(best_site_donor["diff"], amount_needed), 2),
-                "donor_remaining": round(max(0.0, best_site_donor["diff"] - amount_needed), 2),
-                "reason": f"โอนจากหมวด {best_site_donor['name']} (คงเหลือ {best_site_donor['diff']:,.2f} ฿) มาชดเชยหมวด {def_item['name']}"
-            })
+            max_trans = max(0.0, best_site_donor["diff"] - 1000.0)
+            cap_100 = math.floor(max_trans / 100.0) * 100.0
+            amt = min(round_needed, cap_100) if cap_100 > 0 else 0.0
+            if amt > 0:
+                site_transfer_recommendations.append({
+                    "option_title": "แผนที่ 1: โอนภายในค่าใช้จ่ายหน้างานทั่วไป (แนะนำสูงสุด)",
+                    "from_category": best_site_donor["name"],
+                    "from_group": "ค่าใช้จ่ายหน้างาน",
+                    "to_category": def_item["name"],
+                    "to_group": "ค่าใช้จ่ายหน้างาน",
+                    "amount": round(amt, 2),
+                    "donor_remaining": round(best_site_donor["diff"] - amt, 2),
+                    "reason": f"โอนจากหมวด {best_site_donor['name']} (คงเหลือ {best_site_donor['diff']:,.2f} ฿) มาชดเชยหมวด {def_item['name']} จำนวน {amt:,.2f} บาท (คงเหลือติดหมวด {best_site_donor['diff'] - amt:,.2f} ฿)"
+                })
 
         # Option 2: Alternative regular site donor (e.g. ค่าควบคุมงาน, ค่าขนส่ง)
         if len(regular_site_donors) > 1:
             second_site_donor = regular_site_donors[1]
-            site_transfer_recommendations.append({
-                "option_title": f"แผนที่ 2: โอนจากหมวด {second_site_donor['name']}",
-                "from_category": second_site_donor["name"],
-                "from_group": "ค่าใช้จ่ายหน้างาน",
-                "to_category": def_item["name"],
-                "to_group": "ค่าใช้จ่ายหน้างาน",
-                "amount": round(min(second_site_donor["diff"], amount_needed), 2),
-                "donor_remaining": round(max(0.0, second_site_donor["diff"] - amount_needed), 2),
-                "reason": f"โอนจากหมวด {second_site_donor['name']} (คงเหลือ {second_site_donor['diff']:,.2f} ฿) มาชดเชยหมวด {def_item['name']}"
-            })
+            max_trans = max(0.0, second_site_donor["diff"] - 1000.0)
+            cap_100 = math.floor(max_trans / 100.0) * 100.0
+            amt = min(round_needed, cap_100) if cap_100 > 0 else 0.0
+            if amt > 0:
+                site_transfer_recommendations.append({
+                    "option_title": f"แผนที่ 2: โอนจากหมวด {second_site_donor['name']}",
+                    "from_category": second_site_donor["name"],
+                    "from_group": "ค่าใช้จ่ายหน้างาน",
+                    "to_category": def_item["name"],
+                    "to_group": "ค่าใช้จ่ายหน้างาน",
+                    "amount": round(amt, 2),
+                    "donor_remaining": round(second_site_donor["diff"] - amt, 2),
+                    "reason": f"โอนจากหมวด {second_site_donor['name']} (คงเหลือ {second_site_donor['diff']:,.2f} ฿) มาชดเชยหมวด {def_item['name']} จำนวน {amt:,.2f} บาท (คงเหลือติดหมวด {second_site_donor['diff'] - amt:,.2f} ฿)"
+                })
 
         # Last Resort: ค่าดำเนินการ (ใช้ได้ต่อเมื่อค่าใช้จ่ายในส่วนอื่นติดลบหมดหรือไม่พอใช้เท่านั้น)
         if total_regular_surplus < amount_needed and operation_donor:
-            site_transfer_recommendations.append({
-                "option_title": "แผนสำรอง: โอนจากหมวดค่าดำเนินการ (หมวดอื่นไม่เพียงพอ)",
-                "from_category": operation_donor["name"],
-                "from_group": "ค่าใช้จ่ายหน้างาน",
-                "to_category": def_item["name"],
-                "to_group": "ค่าใช้จ่ายหน้างาน",
-                "amount": round(amount_needed, 2),
-                "donor_remaining": round(operation_donor["diff"] - amount_needed, 2),
-                "reason": f"เนื่องจากหมวดค่าใช้จ่ายหน้างานอื่นไม่เพียงพอ จึงจำเป็นต้องโอนจากหมวด {operation_donor['name']} (คงเหลือ {operation_donor['diff']:,.2f} ฿) มาชดเชยตามเงื่อนไขระเบียบ"
-            })
+            max_trans = max(0.0, operation_donor["diff"] - 1000.0)
+            cap_100 = math.floor(max_trans / 100.0) * 100.0
+            amt = min(round_needed, cap_100) if cap_100 > 0 else 0.0
+            if amt > 0:
+                site_transfer_recommendations.append({
+                    "option_title": "แผนสำรอง: โอนจากหมวดค่าดำเนินการ (หมวดอื่นไม่เพียงพอ)",
+                    "from_category": operation_donor["name"],
+                    "from_group": "ค่าใช้จ่ายหน้างาน",
+                    "to_category": def_item["name"],
+                    "to_group": "ค่าใช้จ่ายหน้างาน",
+                    "amount": round(amt, 2),
+                    "donor_remaining": round(operation_donor["diff"] - amt, 2),
+                    "reason": f"เนื่องจากหมวดค่าใช้จ่ายหน้างานอื่นไม่เพียงพอ จึงจำเป็นต้องโอนจากหมวด {operation_donor['name']} (คงเหลือ {operation_donor['diff']:,.2f} ฿) มาชดเชยตามเงื่อนไขระเบียบ จำนวน {amt:,.2f} บาท (คงเหลือติดหมวด {operation_donor['diff'] - amt:,.2f} ฿)"
+                })
 
     # Networks Analysis (วิเคราะห์การเงินตามเลขที่โครงข่าย)
     network_deficits = [n for n in networks if n.get("has_deficit")]
