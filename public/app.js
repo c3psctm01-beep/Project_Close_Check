@@ -1791,28 +1791,104 @@ async function handleExportApprovalDocx() {
 
 function renderAllocatedBudgetTable() {
   const tbody = document.getElementById("allocatedBudgetTableBody");
+  const tfoot = document.getElementById("allocatedBudgetTableFoot");
   if (!tbody || !currentProject) return;
 
-  const cats = currentProject.budget_summary.categories || [];
-  const allocNames = ["ค่าดอกเบี้ยฯ / ปันส่วน", "ค่าใช้จ่ายทางอ้อม", "ค่าใช้จ่ายอื่นๆ / จัดการ"];
-  const allocItems = cats.filter(c => allocNames.includes(c.name));
+  // 1. Retrieve allocated categories robustly
+  let allocItems = [];
+  if (currentProject.budget_summary?.allocated?.items && currentProject.budget_summary.allocated.items.length > 0) {
+    allocItems = currentProject.budget_summary.allocated.items;
+  } else if (currentProject.budget_summary?.categories) {
+    allocItems = currentProject.budget_summary.categories.filter(c => 
+      c.group === "allocated" ||
+      (c.id && ["c8", "c9", "c10"].includes(c.id.toLowerCase())) ||
+      (c.name && (c.name.includes("ปันส่วน") || c.name.includes("ทางอ้อม") || c.name.includes("ดอกเบี้ย")))
+    );
+  }
+
+  // Fallback: Aggregate from networks if project has networks
+  if (allocItems.length === 0 && currentProject.networks) {
+    const allocMap = {};
+    currentProject.networks.forEach(net => {
+      (net.categories || []).forEach(c => {
+        const cid = (c.id || "").toLowerCase();
+        if (c.group === "allocated" || ["c8", "c9", "c10"].includes(cid)) {
+          const key = cid || "c8";
+          if (!allocMap[key]) {
+            allocMap[key] = { id: c.id, name: c.name, group: "allocated", estimate: 0, actual: 0, diff: 0 };
+          }
+          allocMap[key].estimate += (Number(c.estimate) || 0);
+          allocMap[key].actual += (Number(c.actual) || 0);
+        }
+      });
+    });
+    allocItems = Object.values(allocMap).map(item => {
+      item.diff = item.estimate - item.actual;
+      item.is_deficit = item.diff < 0;
+      return item;
+    });
+  }
+
+  // Empty state handling
+  if (allocItems.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="6" class="text-center py-4 text-muted"><i class="fa-solid fa-circle-info text-info"></i> ไม่พบข้อมูลค่าใช้จ่ายปันส่วนทางบัญชีในโครงการนี้</td></tr>`;
+    if (tfoot) tfoot.innerHTML = "";
+    return;
+  }
 
   tbody.innerHTML = "";
+  let totalEstimate = 0;
+  let totalActual = 0;
+  let totalDiff = 0;
+
   allocItems.forEach(c => {
-    const isNeg = c.diff < 0;
+    const est = Number(c.estimate) || 0;
+    const act = Number(c.actual) || 0;
+    const diff = c.diff !== undefined ? Number(c.diff) : (est - act);
+    totalEstimate += est;
+    totalActual += act;
+    totalDiff += diff;
+
+    const isNeg = diff < 0;
+    const cid = (c.id || "").toLowerCase();
+    const cname = c.name || "";
+
+    let noteText = "ค่าใช้จ่ายปันส่วนโดยฝ่ายบัญชีและการเงินตามระยะเวลาก่อสร้าง (ระบบกลางปันส่วน)";
+    if (cid === "c8" || cname.includes("บันทึกเวลา")) {
+      noteText = "ค่าแรงงานปันส่วน/บันทึกเวลาทำงานโดยฝ่ายบัญชี (ระบบกลางปันส่วน ไม่กระทบการปิดงานหน้างาน)";
+    } else if (cid === "c9" || cname.includes("ดอกเบี้ย")) {
+      noteText = "ค่าดอกเบี้ยเงินกู้ฯ/ต้นทุนทางการเงินระหว่างก่อสร้าง (ระบบกลางปันส่วน ไม่กระทบการปิดงานหน้างาน)";
+    } else if (cid === "c10" || cname.includes("ทางอ้อม")) {
+      noteText = "ค่าใช้จ่ายส่วนกลางและทางอ้อมอื่นๆ ปันส่วนตามสัดส่วน (ระบบกลางปันส่วน ไม่กระทบการปิดงานหน้างาน)";
+    }
+
     const tr = document.createElement("tr");
     tr.innerHTML = `
-      <td>${c.id.toUpperCase()}</td>
+      <td class="text-center font-weight-bold"><code>${(c.id || "").toUpperCase()}</code></td>
       <td><strong>${c.name}</strong></td>
-      <td class="text-right font-weight-bold">${formatMoney(c.estimate)}</td>
-      <td class="text-right">${formatMoney(c.actual)}</td>
+      <td class="text-right font-weight-bold">${formatMoney(est)}</td>
+      <td class="text-right">${formatMoney(act)}</td>
       <td class="text-right ${isNeg ? 'text-danger font-weight-bold' : 'text-success font-weight-bold'}">
-        ${isNeg ? '-' : '+'}${formatMoney(Math.abs(c.diff))}
+        ${isNeg ? '-' : '+'}${formatMoney(Math.abs(diff))}
       </td>
-      <td class="text-muted" style="font-size: 0.8rem;">ค่าใช้จ่ายปันส่วนโดยฝ่ายบัญชีและการเงินตามระยะเวลาก่อสร้าง (ระบบกลางปันส่วน)</td>
+      <td class="text-muted" style="font-size: 0.82rem;">${noteText}</td>
     `;
     tbody.appendChild(tr);
   });
+
+  if (tfoot) {
+    tfoot.innerHTML = `
+      <tr class="table-secondary" style="border-top: 2px solid #cbd5e1; background: #f8fafc;">
+        <td colspan="2" class="text-center"><strong>รวมค่าใช้จ่ายปันส่วนทางบัญชี/ทางอ้อม</strong></td>
+        <td class="text-right"><strong>${formatMoney(totalEstimate)} ฿</strong></td>
+        <td class="text-right"><strong>${formatMoney(totalActual)} ฿</strong></td>
+        <td class="text-right ${totalDiff < 0 ? 'text-danger font-weight-bold' : 'text-success font-weight-bold'}">
+          <strong>${totalDiff < 0 ? '-' : '+'}${formatMoney(Math.abs(totalDiff))} ฿</strong>
+        </td>
+        <td class="text-muted" style="font-size: 0.8rem;">ระบบกลางปันส่วนอัตโนมัติ (ไม่นำมาคิดเป็นข้อบกพร่องการปิดงานหน้างาน)</td>
+      </tr>
+    `;
+  }
 }
 
 // --------------------------------------------------------------------------
@@ -2818,9 +2894,9 @@ function generatePrintReport() {
 function exportBudgetToExcel() {
   if (!currentProject) return;
   const cats = currentProject.budget_summary.categories || [];
-  let csv = "\uFEFFรหัส,หมวดค่าใช้จ่าย,ค่าใช้จ่ายจริง(บาท),ผลต่างงบประมาณ(บาท),สถานะ\n";
+  let csv = "\uFEFFรหัส,หมวดค่าใช้จ่าย,กลุ่ม,ประมาณการ(บาท),ค่าใช้จ่ายจริง(บาท),ผลต่างงบประมาณ(บาท),สถานะ\n";
   cats.forEach(c => {
-    csv += `"${c.id}","${c.name}",${c.actual},${c.diff},"${c.diff < 0 ? 'ติดลบ' : 'คงเหลือ'}"\n`;
+    csv += `"${(c.id || '').toUpperCase()}","${c.name}","${c.group_name || ''}",${c.estimate || 0},${c.actual},${c.diff},"${c.diff < 0 ? 'ติดลบ' : 'คงเหลือ'}"\n`;
   });
   downloadCsv(csv, `PEA_Budget_${currentProject.wbs || currentProject.id}.csv`);
 }
