@@ -65,7 +65,12 @@
                 <i class="fa-solid fa-trash-can"></i> ลบโครงการนี้
               </button>
             </div>
-          <h2 class="project-main-title" id="heroProjectName">กำลังโหลดข้อมูลโครงการ...</h2>
+          <div class="project-title-wrapper" style="display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; margin-top: 0.25rem;">
+            <h2 class="project-main-title" id="heroProjectName" style="margin-bottom: 0;">กำลังโหลดข้อมูลโครงการ...</h2>
+            <button class="btn btn-xs btn-outline-purple" id="btnEditProjectName" title="แก้ไขชื่อโครงการนี้" style="padding: 0.2rem 0.55rem; font-size: 0.78rem;">
+              <i class="fa-solid fa-pen-to-square"></i> แก้ไขชื่อ
+            </button>
+          </div>
           <div class="project-meta-inline">
             <span><i class="fa-solid fa-user-gear"></i> ผู้ควบคุมงาน: <strong id="heroOfficer">-</strong></span>
             <span><i class="fa-solid fa-id-card"></i> รหัส: <strong id="heroOfficerId">-</strong></span>
@@ -927,6 +932,17 @@
           <button class="btn btn-sm btn-danger" id="btnRemoveSelectedFile"><i class="fa-solid fa-trash"></i></button>
         </div>
 
+        <!-- Detected / Editable Project Name -->
+        <div class="mt-3" id="uploadProjectNameGroup" style="display: none; background: #fdfbf7; border: 1px solid #e2d9f3; border-radius: 8px; padding: 0.75rem 1rem;">
+          <label class="form-label" style="font-weight: 600; font-size: 0.85rem; color: #4b1a7d; margin-bottom: 0.35rem; display: flex; align-items: center; gap: 0.4rem;">
+            <i class="fa-solid fa-signature text-purple"></i> ชื่อโครงการ (ระบบตรวจจับและปรับให้อัตโนมัติ หรือแก้ไขได้ที่นี่):
+          </label>
+          <input type="text" id="uploadCustomProjectName" class="form-control" style="font-size: 0.9rem; padding: 0.4rem 0.65rem; border: 1.5px solid #a855f7; border-radius: 6px; width: 100%;" placeholder="เช่น งานก่อสร้างสฟฟ.สค. 17(ช)">
+          <small class="text-muted" style="font-size: 0.76rem; display: block; margin-top: 0.25rem;">
+            <i class="fa-solid fa-wand-magic-sparkles text-purple"></i> ระบบจะสกัดและปรับปรุงชื่อให้สอดคล้องกับไฟล์รายงาน SAP โดยอัตโนมัติ
+          </small>
+        </div>
+
         <!-- Uploading Spinner -->
         <div class="upload-progress-container" id="uploadProgressContainer" style="display: none;">
           <div class="pea-spinner"></div>
@@ -937,6 +953,31 @@
         <button class="btn btn-outline-dark" id="btnCancelUpload">ยกเลิก</button>
         <button class="btn btn-gold" id="btnConfirmUpload" disabled>
           <i class="fa-solid fa-magnifying-glass-chart"></i> เริ่มตรวจสอบและนำเข้าข้อมูล
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Edit Project Name Modal -->
+  <div class="pea-modal-backdrop" id="editProjectNameModal">
+    <div class="pea-modal modal-sm" style="max-width: 500px;">
+      <div class="modal-header">
+        <h3><i class="fa-solid fa-pen-to-square text-purple"></i> แก้ไขชื่อโครงการ</h3>
+        <button class="modal-close-btn" id="btnCloseEditProjectNameModal"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <div class="modal-body">
+        <p class="text-muted" style="font-size: 0.85rem; margin-bottom: 0.75rem;">
+          คุณสามารถระบุหรือปรับเปลี่ยนชื่อโครงการก่อสร้างให้ถูกต้อง สอดคล้องกับรายงาน SAP และงานจริง
+        </p>
+        <div class="form-group mb-3">
+          <label class="form-label" style="font-weight: 600; font-size: 0.88rem; display: block; margin-bottom: 0.35rem;">ชื่อโครงการ:</label>
+          <input type="text" id="inputEditProjectName" class="form-control" style="font-size: 0.92rem; padding: 0.5rem 0.75rem; width: 100%; border: 1.5px solid #a855f7; border-radius: 6px;">
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-outline-dark" id="btnCancelEditProjectName">ยกเลิก</button>
+        <button class="btn btn-purple" id="btnSaveProjectName">
+          <i class="fa-solid fa-floppy-disk"></i> บันทึกการแก้ไข
         </button>
       </div>
     </div>

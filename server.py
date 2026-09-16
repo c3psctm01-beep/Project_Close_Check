@@ -32,7 +32,13 @@ except OSError:
 def clean_thai_text(text):
     if not text:
         return ""
-    text = text.replace('\x0c', ' ')
+    # Clean up Form Feed without breaking Thai compound words
+    text = text.replace('ชื\x0cองาน', 'ชื่องาน').replace('ชื องาน', 'ชื่องาน').replace('ชืองาน', 'ชื่องาน')
+    text = text.replace('สั\x0cง', 'สั่ง').replace('สั ง', 'สั่ง')
+    text = text.replace('เรื\x0cอง', 'เรื่อง').replace('เรื อง', 'เรื่อง')
+    text = text.replace('สถานที\x0c', 'สถานที่').replace('สถานที ', 'สถานที่ ')
+    text = text.replace('วันที\x0c', 'วันที่').replace('วันที ', 'วันที่ ')
+    text = text.replace('\x0c', '')
     replacements = {
         '\xc9': '\u0e48',  # ไม้เอก
         '\xca': '\u0e49',  # ไม้โท
@@ -57,6 +63,88 @@ def clean_thai_text(text):
         text = text.replace(k, v)
     text = text.replace("อ้อมน้อย1", "อ้อมน้อย 1")
     return text
+
+def reconcile_project_name(raw_name, filename=None, custom_name=None, wbs=None):
+    """
+    Reconciles extracted PDF project name with filename hints and handles SAP font glyph corruption
+    (e.g., SAP ToUnicode CMap mapping visual '17' to '45', or '14' to 'řŜ').
+    """
+    if custom_name and custom_name.strip():
+        return custom_name.strip()
+
+    if not raw_name:
+        raw_name = ""
+
+    # Basic glyph cleanups
+    name = raw_name.replace("ř", "1").replace("Ŝ", "4").replace("ŝ", "4").strip()
+
+    # Extract hints from filename if provided
+    file_proj_num = None
+    file_proj_suffix = None
+    file_location = None
+    clean_fname = ""
+
+    if filename:
+        clean_fname = os.path.splitext(os.path.basename(filename))[0]
+        # Remove report prefixes e.g. 018-, 018_, ZPSR018
+        clean_fname = re.sub(r"^(?:ZPSR018|ZBUDR018|018|รายงานการปิดงาน|รายงานปิดงาน|ปิดงาน)[-_\s]*", "", clean_fname, flags=re.I)
+        # Remove trailing date e.g. 10-9-69
+        clean_fname = re.sub(r"[-_\s]*\d{1,2}[-_\.]\d{1,2}[-_\.]\d{2,4}$", "", clean_fname).strip()
+
+        # Look for project number and suffix in filename, e.g. '17(ช)', ' 14(ช)', ' 1 (ช)'
+        m_num = re.search(r"(\d+)\s*(\((?:ชค|ช|ชั่วคราว)?\))?", clean_fname)
+        if m_num:
+            file_proj_num = m_num.group(1)
+            file_proj_suffix = m_num.group(2) or ""
+
+        # Detect known location names in filename
+        loc_map = {
+            "สมุทรสาคร": "สค.",
+            "อ้อมน้อย": "อ้อมน้อย",
+            "กระทุ่มแบน": "กบ.",
+            "นครปฐม": "นฐ.",
+            "บ้านแพ้ว": "บพ.",
+            "ท่าม่วง": "ทมง.",
+            "ท่ามะกา": "ทมก.",
+            "ดำเนินสะดวก": "ดน.",
+            "ราชบุรี": "รบ."
+        }
+        for full_loc, abbr in loc_map.items():
+            if full_loc in clean_fname:
+                file_location = abbr
+                break
+
+    # If filename has explicit project number, reconcile corrupted digits/suffixes
+    if file_proj_num:
+        suffix_norm = "(ช)" if ("ช" in (file_proj_suffix or "")) else (file_proj_suffix or "")
+        if re.search(r"\d+\s*\([^)]*\)", name):
+            name = re.sub(r"\d+\s*\([^)]*\)", f" {file_proj_num}{suffix_norm}", name)
+        elif re.search(r"\d+\s*\(", name):
+            name = re.sub(r"\d+\s*\(", f" {file_proj_num}{suffix_norm}", name)
+        elif not re.search(rf"\b{file_proj_num}\b", name):
+            name = f"{name} {file_proj_num}{suffix_norm}"
+
+    # Handle WBS hints if available (e.g. SMNXX -> สค.)
+    if wbs:
+        if "SMNXX" in wbs and "สค." not in name and "สมุทรสาคร" not in name:
+            name = name.replace("สฟฟ.", "สฟฟ.สค. ")
+
+    # Normalize (ชค) to (ช)
+    name = re.sub(r"\(ชค\)", "(ช)", name)
+    # Clean trailing unfinished bracket e.g. '1(' -> '1'
+    name = re.sub(r"\($", "", name).strip()
+
+    # Spacing around digits before (ช)
+    name = re.sub(r"(\D)(\d+)\s*\((ช|ชค)\)", r"\1 \2(\3)", name)
+    name = re.sub(r"\s+", " ", name).strip()
+
+    # Ensure proper 'งาน' prefix
+    if name.startswith("งาน") and name.count("งาน") > 1:
+        name = re.sub(r"^งาน\s*", "", name)
+    elif not name.startswith("งาน") and not name.startswith("โครงการ"):
+        name = "งาน" + name
+
+    return name
 
 # ----------------- PARSER LOGIC -----------------
 COLS = [
@@ -512,10 +600,13 @@ def generate_smart_network_transfers(networks, is_omns=False):
 
     return recommendations
 
-def parse_pdf_data(pdf_bytes_or_path):
+def parse_pdf_data(pdf_bytes_or_path, filename=None, custom_name=None):
     if not HAS_PYMUPDF:
         raise Exception("PyMuPDF (fitz) is not installed on the system.")
     
+    if isinstance(pdf_bytes_or_path, str) and not filename:
+        filename = os.path.basename(pdf_bytes_or_path)
+
     try:
         if isinstance(pdf_bytes_or_path, (bytes, bytearray)):
             doc = fitz.open(stream=pdf_bytes_or_path, filetype="pdf")
@@ -582,23 +673,22 @@ def parse_pdf_data(pdf_bytes_or_path):
     # Parse Project Name
     title_match = re.search(r"ชื[่É\s]*องาน\s*(?:งาน)?\s*([^\n\r]+?)(?=\s*[ก-ฮa-zA-Z]?หมายเลขงาน|\s*REL|\s*C1|\n|$)", full_text)
     if title_match:
-        raw_name = title_match.group(1).replace("ř", "1").replace("Ŝ", "4").replace("ŝ", "4").strip()
-        # Clean double words like 'งานก่อสร้างระบบไฟฟ้าภายในสฟฟ.อ้อมน้อย 1'
-        if raw_name.startswith("งาน") and raw_name.count("งาน") > 1:
-            project_name = re.sub(r"^งาน\s*", "", raw_name)
-        elif not raw_name.startswith("งาน") and not raw_name.startswith("โครงการ"):
-            project_name = "งาน" + raw_name
-        else:
-            project_name = raw_name
+        raw_name = title_match.group(1).strip()
+        project_name = reconcile_project_name(raw_name, filename=filename, custom_name=custom_name, wbs=project_id)
+    elif custom_name and custom_name.strip():
+        project_name = custom_name.strip()
+    elif filename:
+        project_name = reconcile_project_name("", filename=filename, custom_name=custom_name, wbs=project_id)
     else:
         project_name = "โครงการก่อสร้าง/ปรับปรุงระบบไฟฟ้า " + project_id
 
     # Parse Officer
     off_match = re.search(r"ให้นาย([^\s\d]+(?:\s+[^\s\d]+)?)\s*รหัสประ[จํจำ]*ตัว\s*(\d+)", full_text)
     if not off_match:
-        off_match = re.search(r"ให้นาย([ก-ฮะ-ูเ-์a-zA-Z\s]+?)(?:รหัสประ[จํจำ]*ตัว|\s*รหัส|\d)", full_text)
+        off_match = re.search(r"ให้นาย(.*?)(?:รหัสประ[จํจำ]*ตัว|\s*รหัส|\d)", full_text)
     if off_match:
-        officer_name = "นาย" + off_match.group(1).strip()
+        raw_off = off_match.group(1).strip().replace("จักรพันธ์นรเหรียญ", "จักรพันธ์ นรเหรียญ")
+        officer_name = "นาย" + raw_off if not raw_off.startswith("นาย") else raw_off
         id_match = re.search(r"รหัสประ[จํจำ]*ตัว\s*(\d+)", full_text)
         if id_match:
             officer_id = id_match.group(1).strip()
@@ -607,7 +697,8 @@ def parse_pdf_data(pdf_bytes_or_path):
     else:
         off2 = re.search(r"ให้นาย([^\n\r]+)", full_text)
         if off2:
-            officer_name = off2.group(1)[:30].strip()
+            raw_off2 = off2.group(1)[:30].strip().replace("จักรพันธ์นรเหรียญ", "จักรพันธ์ นรเหรียญ")
+            officer_name = "นาย" + raw_off2 if not raw_off2.startswith("นาย") else raw_off2
 
     # Parse Print Date
     date_match = re.search(r"วันที่พิมพ์\s*([\d\.]+)", full_text)
@@ -964,9 +1055,8 @@ def init_default_project(force=False):
     has_sample3 = any(p["id"] == "I-68-I-KKHXX.IS.1007" for p in projects)
     if (force or not has_sample3) and os.path.exists(SAMPLE_SK_PATH):
         try:
-            sample3 = parse_pdf_data(SAMPLE_SK_PATH)
+            sample3 = parse_pdf_data(SAMPLE_SK_PATH, filename="018_สมุทรสาคร 14(ช).pdf")
             if sample3.get("success"):
-                sample3["name"] = "งานก่อสร้างสฟฟ.สค. 14(ช)"
                 sample3["target_month"] = "กันยายน 2569"
                 sample3["target_year_be"] = 2569
                 sample3["target_month_num"] = 9
@@ -978,6 +1068,25 @@ def init_default_project(force=False):
                 modified = True
         except Exception as e:
             print("Error parsing sample 3 (สมุทรสาคร 14(ช)):", e)
+
+    # 4. Auto-detect sample project 4 (018-สมุทรสาคร17(ช).pdf) if present
+    SAMPLE_SK17_PATH = r"C:\Users\500744\OneDrive - pea.co.th\Desktop\018-สมุทรสาคร17(ช).pdf"
+    has_sample17 = any(p["id"] == "I-68-I-SMNXX.19.3911.F" for p in projects)
+    if (force or not has_sample17) and os.path.exists(SAMPLE_SK17_PATH):
+        try:
+            sample17 = parse_pdf_data(SAMPLE_SK17_PATH, filename="018-สมุทรสาคร17(ช).pdf")
+            if sample17.get("success"):
+                sample17["target_month"] = "กันยายน 2569"
+                sample17["target_year_be"] = 2569
+                sample17["target_month_num"] = 9
+                if has_sample17:
+                    idx = next(i for i, p in enumerate(projects) if p["id"] == sample17["id"])
+                    projects[idx] = sample17
+                else:
+                    projects.append(sample17)
+                modified = True
+        except Exception as e:
+            print("Error parsing sample 17 (สมุทรสาคร 17(ช)):", e)
 
     if modified or not os.path.exists(PROJECTS_FILE):
         save_projects(projects)
@@ -1083,6 +1192,21 @@ class SAPCloseHTTPHandler(http.server.SimpleHTTPRequestHandler):
             content_length = int(self.headers.get("Content-Length", 0))
             body = self.rfile.read(content_length)
 
+            filename = None
+            custom_name = None
+
+            # 1. Read filename & custom name from custom headers if provided
+            if self.headers.get("X-Filename"):
+                try:
+                    filename = urllib.parse.unquote(self.headers.get("X-Filename"))
+                except Exception:
+                    filename = self.headers.get("X-Filename")
+            if self.headers.get("X-Project-Name"):
+                try:
+                    custom_name = urllib.parse.unquote(self.headers.get("X-Project-Name"))
+                except Exception:
+                    custom_name = self.headers.get("X-Project-Name")
+
             pdf_bytes = None
             if "multipart/form-data" in content_type:
                 match = re.search(r'boundary=([^;]+)', content_type)
@@ -1091,7 +1215,33 @@ class SAPCloseHTTPHandler(http.server.SimpleHTTPRequestHandler):
                     delimiter = b"--" + boundary_str.encode("utf-8")
                     parts = body.split(delimiter)
                     for p in parts:
+                        # Check for form fields
+                        if b'name="filename"' in p and not filename:
+                            try:
+                                f_body = p.split(b"\r\n\r\n", 1)[1] if b"\r\n\r\n" in p else p.split(b"\n\n", 1)[1]
+                                filename = f_body.strip().rstrip(b"\r\n-").decode("utf-8")
+                            except Exception:
+                                pass
+                        if b'name="custom_project_name"' in p and not custom_name:
+                            try:
+                                c_body = p.split(b"\r\n\r\n", 1)[1] if b"\r\n\r\n" in p else p.split(b"\n\n", 1)[1]
+                                custom_name = c_body.strip().rstrip(b"\r\n-").decode("utf-8")
+                            except Exception:
+                                pass
+
                         if b"%PDF" in p:
+                            # Try to extract filename from part header if not already known
+                            if not filename:
+                                fn_match = re.search(rb'filename="([^"]+)"', p)
+                                if fn_match:
+                                    try:
+                                        filename = fn_match.group(1).decode("utf-8")
+                                    except Exception:
+                                        try:
+                                            filename = fn_match.group(1).decode("latin-1")
+                                        except Exception:
+                                            pass
+
                             if b"\r\n\r\n" in p:
                                 part_body = p.split(b"\r\n\r\n", 1)[1]
                             elif b"\n\n" in p:
@@ -1118,7 +1268,7 @@ class SAPCloseHTTPHandler(http.server.SimpleHTTPRequestHandler):
                 return
 
             try:
-                result = parse_pdf_data(pdf_bytes)
+                result = parse_pdf_data(pdf_bytes, filename=filename, custom_name=custom_name)
                 if not result.get("success"):
                     self.send_response(400)
                     self.send_header("Content-Type", "application/json; charset=utf-8")
@@ -1147,6 +1297,36 @@ class SAPCloseHTTPHandler(http.server.SimpleHTTPRequestHandler):
                     "success": False,
                     "error": f"เกิดข้อผิดพลาดในการประมวลผล PDF: {str(e)}"
                 }, ensure_ascii=False).encode("utf-8"))
+            return
+
+        if url.path == "/api/projects/update-name":
+            content_length = int(self.headers.get("Content-Length", 0))
+            body = self.rfile.read(content_length).decode("utf-8")
+            data = json.loads(body)
+            pid = data.get("id")
+            new_name = data.get("name", "").strip()
+
+            if not new_name:
+                self.send_response(400)
+                self.send_header("Content-Type", "application/json; charset=utf-8")
+                self.end_headers()
+                self.wfile.write(json.dumps({"error": "ชื่อโครงการต้องไม่เป็นค่าว่าง"}).encode("utf-8"))
+                return
+
+            projects = load_projects()
+            match = next((p for p in projects if p["id"] == pid), None)
+            if match:
+                match["name"] = new_name
+                save_projects(projects)
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json; charset=utf-8")
+                self.end_headers()
+                self.wfile.write(json.dumps({"success": True, "project": match}, ensure_ascii=False).encode("utf-8"))
+            else:
+                self.send_response(404)
+                self.send_header("Content-Type", "application/json; charset=utf-8")
+                self.end_headers()
+                self.wfile.write(json.dumps({"error": "Project not found"}).encode("utf-8"))
             return
 
         if url.path == "/api/projects/update-target":

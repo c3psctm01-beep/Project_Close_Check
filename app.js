@@ -61,6 +61,16 @@ const btnCloseInvalidModal = document.getElementById("btnCloseInvalidModal");
 const btnRetryUpload = document.getElementById("btnRetryUpload");
 const invalidModalErrorText = document.getElementById("invalidModalErrorText");
 
+// Edit Project Name Modal
+const editProjectNameModal = document.getElementById("editProjectNameModal");
+const btnEditProjectName = document.getElementById("btnEditProjectName");
+const btnCloseEditProjectNameModal = document.getElementById("btnCloseEditProjectNameModal");
+const btnCancelEditProjectName = document.getElementById("btnCancelEditProjectName");
+const btnSaveProjectName = document.getElementById("btnSaveProjectName");
+const inputEditProjectName = document.getElementById("inputEditProjectName");
+const uploadProjectNameGroup = document.getElementById("uploadProjectNameGroup");
+const uploadCustomProjectName = document.getElementById("uploadCustomProjectName");
+
 // Memo Modal
 const memoModal = document.getElementById("memoModal");
 const btnCloseMemoModal = document.getElementById("btnCloseMemoModal");
@@ -107,6 +117,12 @@ function initEventListeners() {
   btnCloseUploadModal.addEventListener("click", closeUploadModal);
   btnCancelUpload.addEventListener("click", closeUploadModal);
   btnConfirmUpload.addEventListener("click", handleUploadSubmit);
+
+  // Edit project name triggers
+  if (btnEditProjectName) btnEditProjectName.addEventListener("click", () => openEditProjectNameModal());
+  if (btnCloseEditProjectNameModal) btnCloseEditProjectNameModal.addEventListener("click", closeEditProjectNameModal);
+  if (btnCancelEditProjectName) btnCancelEditProjectName.addEventListener("click", closeEditProjectNameModal);
+  if (btnSaveProjectName) btnSaveProjectName.addEventListener("click", handleSaveProjectName);
 
   // Dropzone drag & drop
   pdfDropzone.addEventListener("dragover", (e) => {
@@ -2316,6 +2332,9 @@ function renderProjectsCardsAndDirectory() {
             <button class="btn btn-purple btn-open-detail" onclick="selectProjectById('${p.id}')">
               <i class="fa-solid fa-chart-pie"></i> เปิดดูรายละเอียดโครงการ
             </button>
+            <button class="btn btn-outline-purple btn-sm" onclick="openEditProjectNameModalById('${p.id}')" title="แก้ไขชื่อโครงการ">
+              <i class="fa-solid fa-pen-to-square"></i>
+            </button>
             <button class="btn btn-outline-danger btn-sm" onclick="promptDeleteProject('${p.id}', '${escapeAttr(p.name)}', '${p.wbs || p.id}')" title="ลบโครงการ">
               <i class="fa-solid fa-trash-can"></i>
             </button>
@@ -2370,6 +2389,9 @@ function renderProjectsCardsAndDirectory() {
             <div style="display: inline-flex; gap: 0.35rem; align-items: center; justify-content: center;">
               <button class="btn btn-xs btn-purple" onclick="selectProjectById('${p.id}')" title="เปิดดูโครงการนี้">
                 <i class="fa-solid fa-eye"></i> เปิดดู
+              </button>
+              <button class="btn btn-xs btn-outline-purple" onclick="openEditProjectNameModalById('${p.id}')" title="แก้ไขชื่อโครงการ">
+                <i class="fa-solid fa-pen-to-square"></i> แก้ไขชื่อ
               </button>
               <button class="btn btn-xs btn-outline-danger" onclick="promptDeleteProject('${p.id}', '${escapeAttr(p.name)}', '${p.wbs || p.id}')" title="ลบโครงการออกจากทะเบียน">
                 <i class="fa-solid fa-trash-can"></i> ลบ
@@ -2439,6 +2461,43 @@ function closeUploadModal() {
   resetSelectedFile();
 }
 
+function suggestProjectNameFromFilename(filename) {
+  if (!filename) return "";
+  let base = filename.replace(/\.[^/.]+$/, ""); // strip .pdf
+  // Remove SAP prefixes
+  base = base.replace(/^(?:ZPSR018|ZBUDR018|018|รายงานการปิดงาน|รายงานปิดงาน|ปิดงาน)[-_ ]*/i, "");
+  // Remove dates
+  base = base.replace(/[-_ ]*\d{1,2}[-_\.]\d{1,2}[-_\.]\d{2,4}$/, "").trim();
+
+  // Look for number and suffix e.g. 17(ช), 14(ช), 1 (ช)
+  const numMatch = base.match(/(\d+)\s*(\((?:ชค|ช|ชั่วคราว)?\))?/);
+  const num = numMatch ? numMatch[1] : "";
+  const suffix = (numMatch && numMatch[2] && numMatch[2].includes("ช")) ? "(ช)" : (numMatch && numMatch[2] ? numMatch[2] : "(ช)");
+
+  if (base.includes("สมุทรสาคร") || base.includes("สค.")) {
+    return num ? `งานก่อสร้างสฟฟ.สค. ${num}${suffix}` : `งานก่อสร้างสฟฟ.สค.`;
+  }
+  if (base.includes("อ้อมน้อย") || base.includes("อน.")) {
+    return num ? `งานก่อสร้างระบบไฟฟ้าภายในสฟฟ.อ้อมน้อย ${num}` : `งานก่อสร้างระบบไฟฟ้าภายในสฟฟ.อ้อมน้อย`;
+  }
+  if (base.includes("ท่าม่วง") || base.includes("ทมง.")) {
+    return num ? `งานด้านสถานีไฟฟ้าทมง.${num}` : `งานด้านสถานีไฟฟ้าทมง.`;
+  }
+  if (base.includes("กระทุ่มแบน") || base.includes("กบ.")) {
+    return num ? `งานก่อสร้างสฟฟ.กบ. ${num}${suffix}` : `งานก่อสร้างสฟฟ.กบ.`;
+  }
+  if (base.includes("ดำเนินสะดวก") || base.includes("ดน.")) {
+    return num ? `งานก่อสร้างสฟฟ.ดน. ${num}${suffix}` : `งานก่อสร้างสฟฟ.ดน.`;
+  }
+
+  // Fallback: if base starts with งาน, use it, else prepend งาน
+  if (base.length > 0) {
+    let clean = base.replace(/^(?:งานก่อสร้าง|งาน)/, "").trim();
+    return `งานก่อสร้าง ${clean}`;
+  }
+  return "";
+}
+
 function handleFileSelected(file) {
   if (!file.name.toLowerCase().endsWith(".pdf")) {
     showInvalidTemplateModal("ไฟล์ที่เลือกไม่ใช่นามสกุล .pdf โปรดเลือกไฟล์เอกสาร PDF จากระบบ SAP เท่านั้น");
@@ -2449,6 +2508,13 @@ function handleFileSelected(file) {
   selectedFileName.textContent = file.name;
   selectedFileSize.textContent = `${(file.size / 1024).toFixed(1)} KB`;
   selectedFileCard.style.display = "flex";
+
+  // Pre-fill suggested project name
+  if (uploadProjectNameGroup && uploadCustomProjectName) {
+    uploadProjectNameGroup.style.display = "block";
+    uploadCustomProjectName.value = suggestProjectNameFromFilename(file.name);
+  }
+
   btnConfirmUpload.disabled = false;
 }
 
@@ -2456,6 +2522,8 @@ function resetSelectedFile() {
   selectedPdfFile = null;
   pdfFileInput.value = "";
   selectedFileCard.style.display = "none";
+  if (uploadProjectNameGroup) uploadProjectNameGroup.style.display = "none";
+  if (uploadCustomProjectName) uploadCustomProjectName.value = "";
   btnConfirmUpload.disabled = true;
   uploadProgressContainer.style.display = "none";
 }
@@ -2466,12 +2534,22 @@ async function handleUploadSubmit() {
   uploadProgressContainer.style.display = "block";
   btnConfirmUpload.disabled = true;
 
+  const customProjectName = uploadCustomProjectName ? uploadCustomProjectName.value.trim() : "";
+
   const formData = new FormData();
   formData.append("file", selectedPdfFile);
+  formData.append("filename", selectedPdfFile.name);
+  if (customProjectName) {
+    formData.append("custom_project_name", customProjectName);
+  }
 
   try {
     const res = await fetch("/api/upload-pdf", {
       method: "POST",
+      headers: {
+        "X-Filename": encodeURIComponent(selectedPdfFile.name),
+        "X-Project-Name": encodeURIComponent(customProjectName)
+      },
       body: formData
     });
 
@@ -2510,6 +2588,90 @@ async function handleUploadSubmit() {
       "ไม่สามารถติดต่อเซิร์ฟเวอร์ระบบเพื่อประมวลผล PDF ได้ (" + err.message + ") กรุณาตรวจสอบว่าเซิร์ฟเวอร์ Python กำลังทำงานอยู่ที่พอร์ต 3000",
       "เกิดข้อผิดพลาดในการเชื่อมต่อเซิร์ฟเวอร์"
     );
+  }
+}
+
+// --------------------------------------------------------------------------
+// Project Name Editing
+// --------------------------------------------------------------------------
+function openEditProjectNameModal(project = null) {
+  const p = project || currentProject;
+  if (!p) return;
+  if (inputEditProjectName) {
+    inputEditProjectName.value = p.name || "";
+    inputEditProjectName.dataset.projectId = p.id;
+  }
+  if (editProjectNameModal) {
+    editProjectNameModal.classList.add("show");
+    setTimeout(() => {
+      if (inputEditProjectName) inputEditProjectName.focus();
+    }, 100);
+  }
+}
+
+function openEditProjectNameModalById(id) {
+  const match = allProjects.find(p => p.id === id || p.wbs === id);
+  if (match) {
+    openEditProjectNameModal(match);
+  }
+}
+
+function closeEditProjectNameModal() {
+  if (editProjectNameModal) editProjectNameModal.classList.remove("show");
+}
+
+async function handleSaveProjectName() {
+  if (!inputEditProjectName) return;
+  const newName = inputEditProjectName.value.trim();
+  const pid = inputEditProjectName.dataset.projectId;
+  if (!newName) {
+    showToast("กรุณาระบุชื่อโครงการ", "danger");
+    return;
+  }
+
+  try {
+    const res = await fetch("/api/projects/update-name", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: pid, name: newName })
+    });
+    const data = await res.json();
+    if (!res.ok || !data.success) {
+      showToast(data.error || "ไม่สามารถบันทึกชื่อโครงการได้", "danger");
+      return;
+    }
+
+    // Update in allProjects
+    const idx = allProjects.findIndex(p => p.id === pid);
+    if (idx >= 0) {
+      allProjects[idx].name = newName;
+    }
+    if (currentProject && currentProject.id === pid) {
+      currentProject.name = newName;
+      if (heroProjectName) heroProjectName.textContent = newName;
+    }
+    saveProjectsToCache(allProjects);
+    populateProjectSelect();
+    renderProjectsDirectory();
+
+    closeEditProjectNameModal();
+    showToast("บันทึกชื่อโครงการเรียบร้อยแล้ว!", "success");
+  } catch (err) {
+    console.error("Error updating project name:", err);
+    // Offline fallback
+    const idx = allProjects.findIndex(p => p.id === pid);
+    if (idx >= 0) {
+      allProjects[idx].name = newName;
+    }
+    if (currentProject && currentProject.id === pid) {
+      currentProject.name = newName;
+      if (heroProjectName) heroProjectName.textContent = newName;
+    }
+    saveProjectsToCache(allProjects);
+    populateProjectSelect();
+    renderProjectsDirectory();
+    closeEditProjectNameModal();
+    showToast("บันทึกชื่อโครงการเรียบร้อยแล้ว (แคชภายในระบบ)", "success");
   }
 }
 

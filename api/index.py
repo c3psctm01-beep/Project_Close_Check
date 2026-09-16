@@ -72,6 +72,9 @@ class handler(server.SAPCloseHTTPHandler):
                     "/api/projects",
                     "/api/sample-project",
                     "/api/upload-pdf",
+                    "/api/projects/update-name",
+                    "/api/projects/update-target",
+                    "/api/projects/delete",
                     "/api/export-approval-docx",
                     "/api/download-approval-docx"
                 ]
