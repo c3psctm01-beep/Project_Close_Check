@@ -293,6 +293,18 @@ h1, h2, h3, h4, h5, h6 {
   color: #ffffff;
 }
 
+.btn-outline-gold {
+  background: transparent;
+  border: 1px solid #d4a843;
+  color: #b8860b;
+}
+
+.btn-outline-gold:hover {
+  background: linear-gradient(135deg, #d4a843, #b8860b);
+  color: #ffffff;
+  border-color: #b8860b;
+}
+
 .btn-xs {
   padding: 0.25rem 0.55rem;
   font-size: 0.76rem;

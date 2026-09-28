@@ -61,7 +61,10 @@
               <span class="pea-badge badge-purple" id="templateBadge"><i class="fa-solid fa-file-invoice"></i> TEMPLATE SAP ZPSR018</span>
               <span class="pea-badge badge-wbs" id="wbsBadge"><i class="fa-solid fa-hashtag"></i> WBS: <strong id="heroWbs">-</strong></span>
               <span class="pea-badge badge-status" id="closingStatusBadge"><i class="fa-solid fa-circle-exclamation"></i> รอตรวจสอบ</span>
-              <button id="btnDeleteCurrentProject" class="btn btn-xs btn-outline-danger" title="ลบโครงการปัจจุบันออกจากทะเบียน" style="margin-left: auto;">
+              <button id="btnUpdateZpsr018" class="btn btn-xs btn-outline-gold" title="อัพเดทไฟล์ ZPSR018 ใหม่ (งบประมาณปรับปรุง/โอน)" style="margin-left: auto;" onclick="if(currentProject) openUpdateZpsr018Modal(currentProject.id)">
+                <i class="fa-solid fa-arrows-rotate"></i> อัพเดทไฟล์ ZPSR018
+              </button>
+              <button id="btnDeleteCurrentProject" class="btn btn-xs btn-outline-danger" title="ลบโครงการปัจจุบันออกจากทะเบียน">
                 <i class="fa-solid fa-trash-can"></i> ลบโครงการนี้
               </button>
             </div>
@@ -1187,6 +1190,68 @@
   <!-- Print Report Template (Hidden, shows only when printing) -->
   <div id="printArea" class="print-only">
     <!-- Generated on the fly by JS for printing -->
+  </div>
+
+  <!-- Update ZPSR018 Modal -->
+  <div class="pea-modal-backdrop" id="updateZpsr018Modal">
+    <div class="pea-modal" style="max-width: 580px;">
+      <div class="modal-header">
+        <h3><i class="fa-solid fa-arrows-rotate text-gold"></i> อัพเดทไฟล์ ZPSR018 ใหม่</h3>
+        <button class="modal-close-btn" onclick="closeUpdateZpsr018Modal()"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <div class="modal-body">
+        <!-- Project Info -->
+        <div class="modal-alert-info" style="background: #fef3c7; border-color: #f59e0b;">
+          <i class="fa-solid fa-circle-info" style="color: #d97706;"></i>
+          <div>
+            <strong>อัพเดทข้อมูลงบประมาณสำหรับโครงการที่มีการปรับปรุงหรือโอนงบประมาณแล้ว</strong>
+            <p style="margin: 0.35rem 0 0 0; font-size: 0.85rem;">ระบบจะอัพเดทข้อมูลงบประมาณและพัสดุจากไฟล์ ZPSR018 ฉบับใหม่ โดยคงชื่อโครงการและแผนเดือนปิดงานเดิมไว้</p>
+          </div>
+        </div>
+
+        <div style="background: #f8f5ff; border: 1px solid #d8b4fe; border-radius: 8px; padding: 0.75rem 1rem; margin-bottom: 1rem;">
+          <div style="font-size: 0.82rem; color: #6b21a8; margin-bottom: 0.25rem;"><strong>โครงการที่จะอัพเดท:</strong></div>
+          <div style="display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap;">
+            <span class="pea-badge badge-wbs"><i class="fa-solid fa-hashtag"></i> <strong id="updateModalWbs">-</strong></span>
+            <span style="font-weight: 600; font-size: 0.92rem; color: #1e293b;" id="updateModalProjectName">-</span>
+          </div>
+        </div>
+
+        <!-- Dropzone -->
+        <div class="dropzone-area" id="updatePdfDropzone" onclick="document.getElementById('updatePdfFileInput').click()" style="cursor: pointer; min-height: 120px;">
+          <input type="file" id="updatePdfFileInput" accept="application/pdf" style="display: none;" onchange="if(this.files[0]) handleUpdateFileSelected(this.files[0])">
+          <div class="dropzone-content" style="padding: 1.5rem 1rem;">
+            <div class="dropzone-icon" style="font-size: 1.8rem;"><i class="fa-solid fa-file-arrow-up"></i></div>
+            <h4 style="font-size: 0.95rem; margin: 0.5rem 0 0.25rem;">เลือกไฟล์ ZPSR018 ฉบับใหม่ที่อัพเดทแล้ว</h4>
+            <p class="dropzone-sub" style="font-size: 0.8rem;">ไฟล์ PDF ที่พิมพ์ใหม่จาก SAP หลังปรับปรุง/โอนงบประมาณ</p>
+          </div>
+        </div>
+
+        <!-- Selected File Preview -->
+        <div class="selected-file-card" id="updateSelectedFileCard" style="display: none;">
+          <div class="file-card-info">
+            <i class="fa-solid fa-file-lines text-purple"></i>
+            <div>
+              <strong id="updateSelectedFileName">filename.pdf</strong>
+              <span id="updateSelectedFileSize">0 KB</span>
+            </div>
+          </div>
+          <button class="btn btn-sm btn-danger" onclick="resetUpdateSelectedFile()"><i class="fa-solid fa-trash"></i></button>
+        </div>
+
+        <!-- Upload Progress -->
+        <div class="upload-progress-container" id="updateProgressContainer" style="display: none;">
+          <div class="pea-spinner"></div>
+          <p>กำลังวิเคราะห์และอัพเดทข้อมูลงบประมาณ...</p>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-outline-dark" onclick="closeUpdateZpsr018Modal()">ยกเลิก</button>
+        <button class="btn btn-gold" id="btnConfirmUpdate" disabled onclick="handleUpdateZpsr018Submit()">
+          <i class="fa-solid fa-arrows-rotate"></i> อัพเดทข้อมูลงบประมาณ
+        </button>
+      </div>
+    </div>
   </div>
 
   <!-- Footer -->
