@@ -140,6 +140,25 @@ function initEventListeners() {
     }
   });
 
+  // Update ZPSR018 dropzone drag & drop
+  const updateDropzone = document.getElementById("updatePdfDropzone");
+  if (updateDropzone) {
+    updateDropzone.addEventListener("dragover", (e) => {
+      e.preventDefault();
+      updateDropzone.classList.add("dragover");
+    });
+    updateDropzone.addEventListener("dragleave", () => {
+      updateDropzone.classList.remove("dragover");
+    });
+    updateDropzone.addEventListener("drop", (e) => {
+      e.preventDefault();
+      updateDropzone.classList.remove("dragover");
+      if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+        handleUpdateFileSelected(e.dataTransfer.files[0]);
+      }
+    });
+  }
+
   pdfFileInput.addEventListener("change", (e) => {
     if (e.target.files && e.target.files.length > 0) {
       handleFileSelected(e.target.files[0]);
@@ -290,14 +309,67 @@ function switchTab(tabId) {
 // --------------------------------------------------------------------------
 // API Calls, LocalStorage Cache & Data Loading
 // --------------------------------------------------------------------------
+// API Calls, IndexedDB & LocalStorage Cache & Data Loading
+// --------------------------------------------------------------------------
 const STORAGE_KEY = "pea_sap_projects_cache";
+const DELETED_IDS_KEY = "pea_sap_deleted_ids";
+const LOCAL_ADDED_IDS_KEY = "pea_sap_local_added_ids";
+const IDB_NAME = "pea_sap_db";
+const IDB_STORE = "projects_store";
+const IDB_KEY = "projects_data";
 
-function getCachedProjects() {
+function openProjectsDB() {
+  return new Promise((resolve) => {
+    if (typeof window === "undefined" || !window.indexedDB) {
+      resolve(null);
+      return;
+    }
+    try {
+      const request = window.indexedDB.open(IDB_NAME, 1);
+      request.onupgradeneeded = (e) => {
+        const db = e.target.result;
+        if (!db.objectStoreNames.contains(IDB_STORE)) {
+          db.createObjectStore(IDB_STORE);
+        }
+      };
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => resolve(null);
+    } catch (e) {
+      resolve(null);
+    }
+  });
+}
+
+async function getCachedProjectsAsync() {
+  // 1. Try IndexedDB first (large capacity, no 5MB limit)
+  try {
+    const db = await openProjectsDB();
+    if (db) {
+      const idbData = await new Promise((resolve) => {
+        try {
+          const tx = db.transaction(IDB_STORE, "readonly");
+          const store = tx.objectStore(IDB_STORE);
+          const req = store.get(IDB_KEY);
+          req.onsuccess = () => resolve(req.result);
+          req.onerror = () => resolve(null);
+        } catch (e) {
+          resolve(null);
+        }
+      });
+      if (Array.isArray(idbData)) {
+        return idbData;
+      }
+    }
+  } catch (e) {
+    console.warn("IndexedDB read failed:", e);
+  }
+
+  // 2. Fallback to localStorage
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (raw) {
       const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      if (Array.isArray(parsed)) return parsed;
     }
   } catch (e) {
     console.warn("Failed to read from localStorage:", e);
@@ -305,44 +377,191 @@ function getCachedProjects() {
   return null;
 }
 
-function saveProjectsToCache(projects) {
+function getCachedProjects() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) return parsed;
+    }
+  } catch (e) { /* ignore */ }
+  return null;
+}
+
+async function saveProjectsToCache(projects) {
+  if (!Array.isArray(projects)) return;
+
+  // 1. Save to IndexedDB (asynchronous, reliable, supports large data)
+  try {
+    const db = await openProjectsDB();
+    if (db) {
+      await new Promise((resolve) => {
+        try {
+          const tx = db.transaction(IDB_STORE, "readwrite");
+          const store = tx.objectStore(IDB_STORE);
+          store.put(projects, IDB_KEY);
+          tx.oncomplete = () => resolve(true);
+          tx.onerror = () => resolve(false);
+        } catch (e) {
+          resolve(false);
+        }
+      });
+    }
+  } catch (e) {
+    console.warn("Failed to save to IndexedDB:", e);
+  }
+
+  // 2. Also save to localStorage as backup
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(projects));
   } catch (e) {
-    console.warn("Failed to save to localStorage:", e);
+    console.warn("localStorage quota exceeded or write failed (IndexedDB is primary):", e);
   }
 }
 
+function getDeletedIds() {
+  try {
+    const raw = localStorage.getItem(DELETED_IDS_KEY);
+    if (raw) return JSON.parse(raw);
+  } catch (e) { /* ignore */ }
+  return [];
+}
+
+function addDeletedId(id) {
+  if (!id) return;
+  const ids = getDeletedIds();
+  if (!ids.includes(id)) {
+    ids.push(id);
+    try { localStorage.setItem(DELETED_IDS_KEY, JSON.stringify(ids)); } catch(e) { /* ignore */ }
+  }
+}
+
+function removeDeletedId(id) {
+  if (!id) return;
+  let ids = getDeletedIds();
+  ids = ids.filter(d => d !== id);
+  try { localStorage.setItem(DELETED_IDS_KEY, JSON.stringify(ids)); } catch(e) { /* ignore */ }
+}
+
+function getLocalAddedIds() {
+  try {
+    const raw = localStorage.getItem(LOCAL_ADDED_IDS_KEY);
+    if (raw) return JSON.parse(raw);
+  } catch (e) { /* ignore */ }
+  return [];
+}
+
+function addLocalAddedId(id) {
+  if (!id) return;
+  const ids = getLocalAddedIds();
+  if (!ids.includes(id)) {
+    ids.push(id);
+    try { localStorage.setItem(LOCAL_ADDED_IDS_KEY, JSON.stringify(ids)); } catch(e) { /* ignore */ }
+  }
+}
+
+function removeLocalAddedId(id) {
+  if (!id) return;
+  let ids = getLocalAddedIds();
+  ids = ids.filter(d => d !== id);
+  try { localStorage.setItem(LOCAL_ADDED_IDS_KEY, JSON.stringify(ids)); } catch(e) { /* ignore */ }
+}
+
+/**
+ * Merge server projects with local cache.
+ * - Local cache takes priority for projects that exist in both (user may have edited names, target months)
+ * - Projects deleted locally (tracked in deletedIds) are excluded even if server still returns them
+ * - Projects added locally (uploaded by user) are preserved even if server doesn't know about them
+ */
+function mergeServerAndLocalProjects(serverProjects, cachedProjects) {
+  const deletedIds = getDeletedIds();
+  const merged = [];
+  const seenIds = new Set();
+
+  const isDeleted = (p) => {
+    if (!p) return false;
+    const pid = p.id;
+    const pwbs = p.wbs;
+    return (pid && deletedIds.includes(pid)) || (pwbs && deletedIds.includes(pwbs));
+  };
+
+  // 1. Start with cached projects (they have user's latest edits)
+  if (cachedProjects && cachedProjects.length > 0) {
+    for (const cp of cachedProjects) {
+      if (isDeleted(cp)) continue; // skip deleted
+      merged.push(cp);
+      if (cp.id) seenIds.add(cp.id);
+      if (cp.wbs) seenIds.add(cp.wbs);
+    }
+  }
+
+  // 2. Add server projects that are NOT in cache and NOT deleted
+  if (serverProjects && serverProjects.length > 0) {
+    for (const sp of serverProjects) {
+      if (isDeleted(sp)) continue; // user deleted this
+      if ((sp.id && seenIds.has(sp.id)) || (sp.wbs && seenIds.has(sp.wbs))) {
+        continue;
+      }
+      merged.push(sp);
+      if (sp.id) seenIds.add(sp.id);
+      if (sp.wbs) seenIds.add(sp.wbs);
+    }
+  }
+
+  return merged;
+}
+
 async function loadProjectsFromServer() {
-  // 1. Fetch fresh projects from server API first
+  let serverProjects = null;
+  let cachedProjects = await getCachedProjectsAsync();
+
+  // 1. Try to fetch from server API
   try {
     const response = await fetch("/api/projects");
     if (response.ok) {
-      const serverProjects = await response.json();
-      if (Array.isArray(serverProjects) && serverProjects.length > 0) {
-        allProjects = serverProjects;
-        saveProjectsToCache(allProjects);
-        populateProjectSelect();
-        setCurrentProject(allProjects[0]);
-        renderProjectsCardsAndDirectory();
-        return;
+      const data = await response.json();
+      if (Array.isArray(data) && data.length > 0) {
+        serverProjects = data;
       }
     }
   } catch (err) {
     console.warn("Server unavailable or offline mode, checking local cache...", err);
   }
 
-  // 2. Fallback to local cache if server is offline
-  const cached = getCachedProjects();
-  if (cached && cached.length > 0) {
-    allProjects = cached;
+  // 2. Local cache exists (even if empty array from user deleting all) - merge with server data
+  if (cachedProjects !== null && Array.isArray(cachedProjects)) {
+    allProjects = mergeServerAndLocalProjects(serverProjects || [], cachedProjects);
+    await saveProjectsToCache(allProjects);
     populateProjectSelect();
-    setCurrentProject(allProjects[0]);
+    if (allProjects.length > 0) {
+      setCurrentProject(allProjects[0]);
+    } else {
+      renderEmptyProjectState();
+    }
     renderProjectsCardsAndDirectory();
     return;
   }
 
-  // 3. Fallback to sample project
+  // 3. No cache at all (very first visit) - use server data directly
+  if (serverProjects && serverProjects.length > 0) {
+    allProjects = serverProjects;
+    // Filter out any previously deleted projects
+    const deletedIds = getDeletedIds();
+    if (deletedIds.length > 0) {
+      allProjects = allProjects.filter(p => !deletedIds.includes(p.id) && !deletedIds.includes(p.wbs));
+    }
+    await saveProjectsToCache(allProjects);
+    populateProjectSelect();
+    if (allProjects.length > 0) {
+      setCurrentProject(allProjects[0]);
+    } else {
+      renderEmptyProjectState();
+    }
+    renderProjectsCardsAndDirectory();
+    return;
+  }
+
+  // 4. Fallback to sample project
   await loadSampleProject();
   renderProjectsCardsAndDirectory();
 }
@@ -2084,6 +2303,37 @@ async function executeDeleteProject() {
 
   const deletedName = projectPendingDelete.name;
   const deletedId = projectPendingDelete.id;
+  const deletedWbs = projectPendingDelete.wbs;
+
+  const performLocalDelete = async () => {
+    allProjects = allProjects.filter(p => p.id !== deletedId && p.wbs !== deletedId && (!deletedWbs || (p.id !== deletedWbs && p.wbs !== deletedWbs)));
+    addDeletedId(deletedId);
+    if (deletedWbs && deletedWbs !== deletedId) addDeletedId(deletedWbs);
+    removeLocalAddedId(deletedId);
+    if (deletedWbs) removeLocalAddedId(deletedWbs);
+    await saveProjectsToCache(allProjects);
+
+    closeDeleteModal();
+    showToast(`ลบโครงการ "${deletedName}" ออกจากทะเบียนเรียบร้อยแล้ว`, "success");
+
+    // Handle current project deletion
+    if (currentProject && (currentProject.id === deletedId || currentProject.wbs === deletedId || (deletedWbs && (currentProject.id === deletedWbs || currentProject.wbs === deletedWbs)))) {
+      if (allProjects.length > 0) {
+        populateProjectSelect();
+        setCurrentProject(allProjects[0]);
+      } else {
+        renderEmptyProjectState();
+      }
+    } else {
+      populateProjectSelect();
+      if (currentProject) {
+        projectSelect.value = currentProject.id;
+      }
+    }
+
+    renderProjectsDirectory();
+    renderProjectsCardsAndDirectory();
+  };
 
   try {
     const res = await fetch("/api/projects/delete", {
@@ -2094,35 +2344,14 @@ async function executeDeleteProject() {
 
     const data = await res.json();
     if (res.ok && data.success) {
-      // Update client-side allProjects list
-      allProjects = allProjects.filter(p => p.id !== deletedId && p.wbs !== deletedId);
-      saveProjectsToCache(allProjects);
-      
-      closeDeleteModal();
-      showToast(`ลบโครงการ "${deletedName}" ออกจากทะเบียนเรียบร้อยแล้ว`, "success");
-
-      // Handle current project deletion
-      if (currentProject && (currentProject.id === deletedId || currentProject.wbs === deletedId)) {
-        if (allProjects.length > 0) {
-          populateProjectSelect();
-          setCurrentProject(allProjects[0]);
-        } else {
-          renderEmptyProjectState();
-        }
-      } else {
-        populateProjectSelect();
-        if (currentProject) {
-          projectSelect.value = currentProject.id;
-        }
-      }
-
-      renderProjectsDirectory();
+      await performLocalDelete();
     } else {
-      showToast(data.error || "เกิดข้อผิดพลาดในการลบโครงการ", "danger");
+      console.warn("Server delete returned non-success, deleting locally:", data);
+      await performLocalDelete();
     }
   } catch (err) {
-    console.error("Error deleting project:", err);
-    showToast("ไม่สามารถเชื่อมต่อเซิร์ฟเวอร์เพื่อลบโครงการได้", "danger");
+    console.warn("Error deleting project from server, performing local delete:", err);
+    await performLocalDelete();
   } finally {
     if (btnConfirm) {
       btnConfirm.disabled = false;
@@ -2332,6 +2561,9 @@ function renderProjectsCardsAndDirectory() {
             <button class="btn btn-purple btn-open-detail" onclick="selectProjectById('${p.id}')">
               <i class="fa-solid fa-chart-pie"></i> เปิดดูรายละเอียดโครงการ
             </button>
+            <button class="btn btn-outline-gold btn-sm" onclick="openUpdateZpsr018Modal('${p.id}')" title="อัพเดทไฟล์ ZPSR018 ใหม่">
+              <i class="fa-solid fa-arrows-rotate"></i>
+            </button>
             <button class="btn btn-outline-purple btn-sm" onclick="openEditProjectNameModalById('${p.id}')" title="แก้ไขชื่อโครงการ">
               <i class="fa-solid fa-pen-to-square"></i>
             </button>
@@ -2390,6 +2622,9 @@ function renderProjectsCardsAndDirectory() {
               <button class="btn btn-xs btn-purple" onclick="selectProjectById('${p.id}')" title="เปิดดูโครงการนี้">
                 <i class="fa-solid fa-eye"></i> เปิดดู
               </button>
+              <button class="btn btn-xs btn-outline-gold" onclick="openUpdateZpsr018Modal('${p.id}')" title="อัพเดทไฟล์ ZPSR018">
+                <i class="fa-solid fa-arrows-rotate"></i> อัพเดท
+              </button>
               <button class="btn btn-xs btn-outline-purple" onclick="openEditProjectNameModalById('${p.id}')" title="แก้ไขชื่อโครงการ">
                 <i class="fa-solid fa-pen-to-square"></i> แก้ไขชื่อ
               </button>
@@ -2429,7 +2664,7 @@ async function saveTargetMonth() {
   currentProject.target_month = newTarget;
   targetMonthDisplay.textContent = newTarget;
   document.getElementById("checkTargetMonthText").textContent = newTarget;
-  saveProjectsToCache(allProjects);
+  await saveProjectsToCache(allProjects);
 
   try {
     const res = await fetch("/api/projects/update-target", {
@@ -2570,24 +2805,190 @@ async function handleUploadSubmit() {
     showToast("นำเข้าและวิเคราะห์ไฟล์ SAP PDF เรียบร้อยแล้ว!", "success");
 
     // Add or update in allProjects
-    const existingIdx = allProjects.findIndex(p => p.id === result.id);
+    const existingIdx = allProjects.findIndex(p => p.id === result.id || (result.wbs && (p.id === result.wbs || p.wbs === result.wbs)));
     if (existingIdx >= 0) {
       allProjects[existingIdx] = result;
     } else {
       allProjects.unshift(result);
     }
-    saveProjectsToCache(allProjects);
+    // Track this as a locally-added project & remove from deleted list if re-adding
+    addLocalAddedId(result.id);
+    if (result.wbs) addLocalAddedId(result.wbs);
+    removeDeletedId(result.id);
+    if (result.wbs) removeDeletedId(result.wbs);
+    await saveProjectsToCache(allProjects);
 
     populateProjectSelect();
     setCurrentProject(result);
+    renderProjectsCardsAndDirectory();
     switchTab("tab-overview");
   } catch (err) {
     uploadProgressContainer.style.display = "none";
     closeUploadModal();
     showInvalidTemplateModal(
-      "ไม่สามารถติดต่อเซิร์ฟเวอร์ระบบเพื่อประมวลผล PDF ได้ (" + err.message + ") กรุณาตรวจสอบว่าเซิร์ฟเวอร์ Python กำลังทำงานอยู่ที่พอร์ต 3000",
+      "ไม่สามารถติดต่อเซิร์ฟเวอร์ระบบเพื่อประมวลผล PDF ได้ (" + err.message + ")",
       "เกิดข้อผิดพลาดในการเชื่อมต่อเซิร์ฟเวอร์"
     );
+  } finally {
+    btnConfirmUpload.disabled = false;
+  }
+}
+
+// --------------------------------------------------------------------------
+// Update ZPSR018 for Existing Project (อัพเดทไฟล์ ZPSR018 ใหม่)
+// --------------------------------------------------------------------------
+let updateTargetProjectId = null;
+
+function openUpdateZpsr018Modal(projectId) {
+  const project = allProjects.find(p => p.id === projectId || p.wbs === projectId);
+  if (!project) {
+    showToast("ไม่พบโครงการที่ต้องการอัพเดท", "danger");
+    return;
+  }
+  updateTargetProjectId = project.id;
+  
+  const modal = document.getElementById("updateZpsr018Modal");
+  const nameEl = document.getElementById("updateModalProjectName");
+  const wbsEl = document.getElementById("updateModalWbs");
+  const fileInput = document.getElementById("updatePdfFileInput");
+  const fileCard = document.getElementById("updateSelectedFileCard");
+  const btnConfirm = document.getElementById("btnConfirmUpdate");
+  const progressEl = document.getElementById("updateProgressContainer");
+  
+  if (nameEl) nameEl.textContent = project.name || project.id;
+  if (wbsEl) wbsEl.textContent = project.wbs || project.id;
+  if (fileInput) fileInput.value = "";
+  if (fileCard) fileCard.style.display = "none";
+  if (btnConfirm) btnConfirm.disabled = true;
+  if (progressEl) progressEl.style.display = "none";
+  
+  if (modal) modal.classList.add("show");
+}
+
+function closeUpdateZpsr018Modal() {
+  const modal = document.getElementById("updateZpsr018Modal");
+  if (modal) modal.classList.remove("show");
+  updateTargetProjectId = null;
+}
+
+function handleUpdateFileSelected(file) {
+  if (!file || !file.name.toLowerCase().endsWith(".pdf")) {
+    showToast("กรุณาเลือกไฟล์ PDF เท่านั้น", "danger");
+    return;
+  }
+  const nameEl = document.getElementById("updateSelectedFileName");
+  const sizeEl = document.getElementById("updateSelectedFileSize");
+  const fileCard = document.getElementById("updateSelectedFileCard");
+  const btnConfirm = document.getElementById("btnConfirmUpdate");
+  
+  if (nameEl) nameEl.textContent = file.name;
+  if (sizeEl) sizeEl.textContent = `${(file.size / 1024).toFixed(1)} KB`;
+  if (fileCard) fileCard.style.display = "flex";
+  if (btnConfirm) btnConfirm.disabled = false;
+  
+  // Store the file temporarily
+  document.getElementById("updatePdfFileInput")._selectedFile = file;
+}
+
+function resetUpdateSelectedFile() {
+  const fileInput = document.getElementById("updatePdfFileInput");
+  const fileCard = document.getElementById("updateSelectedFileCard");
+  const btnConfirm = document.getElementById("btnConfirmUpdate");
+  if (fileInput) { fileInput.value = ""; fileInput._selectedFile = null; }
+  if (fileCard) fileCard.style.display = "none";
+  if (btnConfirm) btnConfirm.disabled = true;
+}
+
+async function handleUpdateZpsr018Submit() {
+  const fileInput = document.getElementById("updatePdfFileInput");
+  const file = fileInput ? fileInput._selectedFile : null;
+  if (!file || !updateTargetProjectId) return;
+  
+  const btnConfirm = document.getElementById("btnConfirmUpdate");
+  const progressEl = document.getElementById("updateProgressContainer");
+  if (btnConfirm) btnConfirm.disabled = true;
+  if (progressEl) progressEl.style.display = "block";
+  
+  // Find the existing project to preserve user-set fields
+  const existingProject = allProjects.find(p => p.id === updateTargetProjectId);
+  const preservedFields = existingProject ? {
+    name: existingProject.name,
+    target_month: existingProject.target_month,
+    target_year_be: existingProject.target_year_be,
+    target_month_num: existingProject.target_month_num
+  } : {};
+  
+  const formData = new FormData();
+  formData.append("file", file);
+  formData.append("filename", file.name);
+  if (preservedFields.name) {
+    formData.append("custom_project_name", preservedFields.name);
+  }
+  
+  try {
+    const res = await fetch("/api/upload-pdf", {
+      method: "POST",
+      headers: {
+        "X-Filename": encodeURIComponent(file.name),
+        "X-Project-Name": encodeURIComponent(preservedFields.name || "")
+      },
+      body: formData
+    });
+    
+    const result = await res.json();
+    if (progressEl) progressEl.style.display = "none";
+    
+    if (!res.ok || !result.success) {
+      closeUpdateZpsr018Modal();
+      showInvalidTemplateModal(
+        result.error || "ไฟล์นี้ไม่ใช่รายงานปิดงานจากระบบ SAP (ZPSR018 / ZBUDR018)",
+        "ไม่สามารถอัพเดทไฟล์ ZPSR018 ได้"
+      );
+      return;
+    }
+    
+    // Merge: keep user-set fields, update budget/materials from new file
+    if (preservedFields.name) result.name = preservedFields.name;
+    if (preservedFields.target_month) {
+      result.target_month = preservedFields.target_month;
+      result.target_year_be = preservedFields.target_year_be;
+      result.target_month_num = preservedFields.target_month_num;
+    }
+    if (preservedFields.wbs && !result.wbs) result.wbs = preservedFields.wbs;
+    
+    // Update in allProjects
+    const idx = allProjects.findIndex(p => p.id === updateTargetProjectId || p.wbs === updateTargetProjectId);
+    if (idx >= 0) {
+      // Preserve ID to maintain references
+      result.id = allProjects[idx].id;
+      allProjects[idx] = result;
+    } else {
+      allProjects.unshift(result);
+    }
+    addLocalAddedId(result.id);
+    if (result.wbs) addLocalAddedId(result.wbs);
+    removeDeletedId(result.id);
+    if (result.wbs) removeDeletedId(result.wbs);
+    await saveProjectsToCache(allProjects);
+    
+    closeUpdateZpsr018Modal();
+    showToast(`อัพเดทข้อมูลงบประมาณสำเร็จแล้ว (${result.print_date ? 'พิมพ์วันที่ ' + result.print_date : 'ล่าสุด'})`, "success");
+    
+    populateProjectSelect();
+    if (currentProject && (currentProject.id === updateTargetProjectId || currentProject.wbs === updateTargetProjectId)) {
+      setCurrentProject(result);
+    }
+    renderProjectsCardsAndDirectory();
+    switchTab("tab-overview");
+  } catch (err) {
+    if (progressEl) progressEl.style.display = "none";
+    closeUpdateZpsr018Modal();
+    showInvalidTemplateModal(
+      "ไม่สามารถติดต่อเซิร์ฟเวอร์เพื่อประมวลผล PDF ได้ (" + err.message + ")",
+      "เกิดข้อผิดพลาดในการเชื่อมต่อเซิร์ฟเวอร์"
+    );
+  } finally {
+    if (btnConfirm) btnConfirm.disabled = false;
   }
 }
 
@@ -2650,7 +3051,7 @@ async function handleSaveProjectName() {
       currentProject.name = newName;
       if (heroProjectName) heroProjectName.textContent = newName;
     }
-    saveProjectsToCache(allProjects);
+    await saveProjectsToCache(allProjects);
     populateProjectSelect();
     renderProjectsDirectory();
 
@@ -2667,7 +3068,7 @@ async function handleSaveProjectName() {
       currentProject.name = newName;
       if (heroProjectName) heroProjectName.textContent = newName;
     }
-    saveProjectsToCache(allProjects);
+    await saveProjectsToCache(allProjects);
     populateProjectSelect();
     renderProjectsDirectory();
     closeEditProjectNameModal();

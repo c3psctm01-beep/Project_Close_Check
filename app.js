@@ -309,16 +309,67 @@ function switchTab(tabId) {
 // --------------------------------------------------------------------------
 // API Calls, LocalStorage Cache & Data Loading
 // --------------------------------------------------------------------------
+// API Calls, IndexedDB & LocalStorage Cache & Data Loading
+// --------------------------------------------------------------------------
 const STORAGE_KEY = "pea_sap_projects_cache";
 const DELETED_IDS_KEY = "pea_sap_deleted_ids";
 const LOCAL_ADDED_IDS_KEY = "pea_sap_local_added_ids";
+const IDB_NAME = "pea_sap_db";
+const IDB_STORE = "projects_store";
+const IDB_KEY = "projects_data";
 
-function getCachedProjects() {
+function openProjectsDB() {
+  return new Promise((resolve) => {
+    if (typeof window === "undefined" || !window.indexedDB) {
+      resolve(null);
+      return;
+    }
+    try {
+      const request = window.indexedDB.open(IDB_NAME, 1);
+      request.onupgradeneeded = (e) => {
+        const db = e.target.result;
+        if (!db.objectStoreNames.contains(IDB_STORE)) {
+          db.createObjectStore(IDB_STORE);
+        }
+      };
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => resolve(null);
+    } catch (e) {
+      resolve(null);
+    }
+  });
+}
+
+async function getCachedProjectsAsync() {
+  // 1. Try IndexedDB first (large capacity, no 5MB limit)
+  try {
+    const db = await openProjectsDB();
+    if (db) {
+      const idbData = await new Promise((resolve) => {
+        try {
+          const tx = db.transaction(IDB_STORE, "readonly");
+          const store = tx.objectStore(IDB_STORE);
+          const req = store.get(IDB_KEY);
+          req.onsuccess = () => resolve(req.result);
+          req.onerror = () => resolve(null);
+        } catch (e) {
+          resolve(null);
+        }
+      });
+      if (Array.isArray(idbData)) {
+        return idbData;
+      }
+    }
+  } catch (e) {
+    console.warn("IndexedDB read failed:", e);
+  }
+
+  // 2. Fallback to localStorage
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (raw) {
       const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      if (Array.isArray(parsed)) return parsed;
     }
   } catch (e) {
     console.warn("Failed to read from localStorage:", e);
@@ -326,11 +377,45 @@ function getCachedProjects() {
   return null;
 }
 
-function saveProjectsToCache(projects) {
+function getCachedProjects() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) return parsed;
+    }
+  } catch (e) { /* ignore */ }
+  return null;
+}
+
+async function saveProjectsToCache(projects) {
+  if (!Array.isArray(projects)) return;
+
+  // 1. Save to IndexedDB (asynchronous, reliable, supports large data)
+  try {
+    const db = await openProjectsDB();
+    if (db) {
+      await new Promise((resolve) => {
+        try {
+          const tx = db.transaction(IDB_STORE, "readwrite");
+          const store = tx.objectStore(IDB_STORE);
+          store.put(projects, IDB_KEY);
+          tx.oncomplete = () => resolve(true);
+          tx.onerror = () => resolve(false);
+        } catch (e) {
+          resolve(false);
+        }
+      });
+    }
+  } catch (e) {
+    console.warn("Failed to save to IndexedDB:", e);
+  }
+
+  // 2. Also save to localStorage as backup
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(projects));
   } catch (e) {
-    console.warn("Failed to save to localStorage:", e);
+    console.warn("localStorage quota exceeded or write failed (IndexedDB is primary):", e);
   }
 }
 
@@ -343,6 +428,7 @@ function getDeletedIds() {
 }
 
 function addDeletedId(id) {
+  if (!id) return;
   const ids = getDeletedIds();
   if (!ids.includes(id)) {
     ids.push(id);
@@ -351,6 +437,7 @@ function addDeletedId(id) {
 }
 
 function removeDeletedId(id) {
+  if (!id) return;
   let ids = getDeletedIds();
   ids = ids.filter(d => d !== id);
   try { localStorage.setItem(DELETED_IDS_KEY, JSON.stringify(ids)); } catch(e) { /* ignore */ }
@@ -365,11 +452,19 @@ function getLocalAddedIds() {
 }
 
 function addLocalAddedId(id) {
+  if (!id) return;
   const ids = getLocalAddedIds();
   if (!ids.includes(id)) {
     ids.push(id);
     try { localStorage.setItem(LOCAL_ADDED_IDS_KEY, JSON.stringify(ids)); } catch(e) { /* ignore */ }
   }
+}
+
+function removeLocalAddedId(id) {
+  if (!id) return;
+  let ids = getLocalAddedIds();
+  ids = ids.filter(d => d !== id);
+  try { localStorage.setItem(LOCAL_ADDED_IDS_KEY, JSON.stringify(ids)); } catch(e) { /* ignore */ }
 }
 
 /**
@@ -380,46 +475,36 @@ function addLocalAddedId(id) {
  */
 function mergeServerAndLocalProjects(serverProjects, cachedProjects) {
   const deletedIds = getDeletedIds();
-  const localAddedIds = getLocalAddedIds();
   const merged = [];
   const seenIds = new Set();
+
+  const isDeleted = (p) => {
+    if (!p) return false;
+    const pid = p.id;
+    const pwbs = p.wbs;
+    return (pid && deletedIds.includes(pid)) || (pwbs && deletedIds.includes(pwbs));
+  };
 
   // 1. Start with cached projects (they have user's latest edits)
   if (cachedProjects && cachedProjects.length > 0) {
     for (const cp of cachedProjects) {
-      const cpId = cp.id || cp.wbs;
-      if (deletedIds.includes(cpId)) continue; // skip deleted
+      if (isDeleted(cp)) continue; // skip deleted
       merged.push(cp);
-      seenIds.add(cpId);
+      if (cp.id) seenIds.add(cp.id);
+      if (cp.wbs) seenIds.add(cp.wbs);
     }
   }
 
   // 2. Add server projects that are NOT in cache and NOT deleted
   if (serverProjects && serverProjects.length > 0) {
     for (const sp of serverProjects) {
-      const spId = sp.id || sp.wbs;
-      if (deletedIds.includes(spId)) continue; // user deleted this
-      if (seenIds.has(spId)) {
-        // Already in cache - but if this is NOT a locally-added project,
-        // update server-sourced fields that user hasn't edited
-        if (!localAddedIds.includes(spId)) {
-          const idx = merged.findIndex(m => (m.id || m.wbs) === spId);
-          if (idx >= 0) {
-            // Preserve user-editable fields from cache, take rest from server
-            const cached = merged[idx];
-            const userFields = {
-              name: cached.name,
-              target_month: cached.target_month,
-              target_year_be: cached.target_year_be,
-              target_month_num: cached.target_month_num
-            };
-            // Don't overwrite cache with server for locally-modified projects
-          }
-        }
+      if (isDeleted(sp)) continue; // user deleted this
+      if ((sp.id && seenIds.has(sp.id)) || (sp.wbs && seenIds.has(sp.wbs))) {
         continue;
       }
       merged.push(sp);
-      seenIds.add(spId);
+      if (sp.id) seenIds.add(sp.id);
+      if (sp.wbs) seenIds.add(sp.wbs);
     }
   }
 
@@ -428,7 +513,7 @@ function mergeServerAndLocalProjects(serverProjects, cachedProjects) {
 
 async function loadProjectsFromServer() {
   let serverProjects = null;
-  let cachedProjects = getCachedProjects();
+  let cachedProjects = await getCachedProjectsAsync();
 
   // 1. Try to fetch from server API
   try {
@@ -443,18 +528,21 @@ async function loadProjectsFromServer() {
     console.warn("Server unavailable or offline mode, checking local cache...", err);
   }
 
-  // 2. Merge server + cache (local cache takes priority)
-  if (cachedProjects && cachedProjects.length > 0) {
-    // Local cache exists - merge with server data
+  // 2. Local cache exists (even if empty array from user deleting all) - merge with server data
+  if (cachedProjects !== null && Array.isArray(cachedProjects)) {
     allProjects = mergeServerAndLocalProjects(serverProjects || [], cachedProjects);
-    saveProjectsToCache(allProjects);
+    await saveProjectsToCache(allProjects);
     populateProjectSelect();
-    setCurrentProject(allProjects[0]);
+    if (allProjects.length > 0) {
+      setCurrentProject(allProjects[0]);
+    } else {
+      renderEmptyProjectState();
+    }
     renderProjectsCardsAndDirectory();
     return;
   }
 
-  // 3. No cache - use server data directly (first load)
+  // 3. No cache at all (very first visit) - use server data directly
   if (serverProjects && serverProjects.length > 0) {
     allProjects = serverProjects;
     // Filter out any previously deleted projects
@@ -462,10 +550,12 @@ async function loadProjectsFromServer() {
     if (deletedIds.length > 0) {
       allProjects = allProjects.filter(p => !deletedIds.includes(p.id) && !deletedIds.includes(p.wbs));
     }
-    saveProjectsToCache(allProjects);
+    await saveProjectsToCache(allProjects);
     populateProjectSelect();
     if (allProjects.length > 0) {
       setCurrentProject(allProjects[0]);
+    } else {
+      renderEmptyProjectState();
     }
     renderProjectsCardsAndDirectory();
     return;
@@ -2213,54 +2303,21 @@ async function executeDeleteProject() {
 
   const deletedName = projectPendingDelete.name;
   const deletedId = projectPendingDelete.id;
+  const deletedWbs = projectPendingDelete.wbs;
 
-  try {
-    const res = await fetch("/api/projects/delete", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id: deletedId })
-    });
-
-    const data = await res.json();
-    if (res.ok && data.success) {
-      // Update client-side allProjects list
-      allProjects = allProjects.filter(p => p.id !== deletedId && p.wbs !== deletedId);
-      addDeletedId(deletedId); // Track deletion so server data doesn't re-add it
-      saveProjectsToCache(allProjects);
-      
-      closeDeleteModal();
-      showToast(`ลบโครงการ "${deletedName}" ออกจากทะเบียนเรียบร้อยแล้ว`, "success");
-
-      // Handle current project deletion
-      if (currentProject && (currentProject.id === deletedId || currentProject.wbs === deletedId)) {
-        if (allProjects.length > 0) {
-          populateProjectSelect();
-          setCurrentProject(allProjects[0]);
-        } else {
-          renderEmptyProjectState();
-        }
-      } else {
-        populateProjectSelect();
-        if (currentProject) {
-          projectSelect.value = currentProject.id;
-        }
-      }
-
-      renderProjectsDirectory();
-    } else {
-      showToast(data.error || "เกิดข้อผิดพลาดในการลบโครงการ", "danger");
-    }
-  } catch (err) {
-    console.error("Error deleting project:", err);
-    // Offline/Vercel fallback: delete locally even if server is unreachable
-    allProjects = allProjects.filter(p => p.id !== deletedId && p.wbs !== deletedId);
+  const performLocalDelete = async () => {
+    allProjects = allProjects.filter(p => p.id !== deletedId && p.wbs !== deletedId && (!deletedWbs || (p.id !== deletedWbs && p.wbs !== deletedWbs)));
     addDeletedId(deletedId);
-    saveProjectsToCache(allProjects);
-    
-    closeDeleteModal();
-    showToast(`ลบโครงการ "${deletedName}" เรียบร้อยแล้ว`, "success");
+    if (deletedWbs && deletedWbs !== deletedId) addDeletedId(deletedWbs);
+    removeLocalAddedId(deletedId);
+    if (deletedWbs) removeLocalAddedId(deletedWbs);
+    await saveProjectsToCache(allProjects);
 
-    if (currentProject && (currentProject.id === deletedId || currentProject.wbs === deletedId)) {
+    closeDeleteModal();
+    showToast(`ลบโครงการ "${deletedName}" ออกจากทะเบียนเรียบร้อยแล้ว`, "success");
+
+    // Handle current project deletion
+    if (currentProject && (currentProject.id === deletedId || currentProject.wbs === deletedId || (deletedWbs && (currentProject.id === deletedWbs || currentProject.wbs === deletedWbs)))) {
       if (allProjects.length > 0) {
         populateProjectSelect();
         setCurrentProject(allProjects[0]);
@@ -2273,7 +2330,28 @@ async function executeDeleteProject() {
         projectSelect.value = currentProject.id;
       }
     }
+
     renderProjectsDirectory();
+    renderProjectsCardsAndDirectory();
+  };
+
+  try {
+    const res = await fetch("/api/projects/delete", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: deletedId })
+    });
+
+    const data = await res.json();
+    if (res.ok && data.success) {
+      await performLocalDelete();
+    } else {
+      console.warn("Server delete returned non-success, deleting locally:", data);
+      await performLocalDelete();
+    }
+  } catch (err) {
+    console.warn("Error deleting project from server, performing local delete:", err);
+    await performLocalDelete();
   } finally {
     if (btnConfirm) {
       btnConfirm.disabled = false;
@@ -2586,7 +2664,7 @@ async function saveTargetMonth() {
   currentProject.target_month = newTarget;
   targetMonthDisplay.textContent = newTarget;
   document.getElementById("checkTargetMonthText").textContent = newTarget;
-  saveProjectsToCache(allProjects);
+  await saveProjectsToCache(allProjects);
 
   try {
     const res = await fetch("/api/projects/update-target", {
@@ -2727,7 +2805,7 @@ async function handleUploadSubmit() {
     showToast("นำเข้าและวิเคราะห์ไฟล์ SAP PDF เรียบร้อยแล้ว!", "success");
 
     // Add or update in allProjects
-    const existingIdx = allProjects.findIndex(p => p.id === result.id);
+    const existingIdx = allProjects.findIndex(p => p.id === result.id || (result.wbs && (p.id === result.wbs || p.wbs === result.wbs)));
     if (existingIdx >= 0) {
       allProjects[existingIdx] = result;
     } else {
@@ -2735,19 +2813,24 @@ async function handleUploadSubmit() {
     }
     // Track this as a locally-added project & remove from deleted list if re-adding
     addLocalAddedId(result.id);
+    if (result.wbs) addLocalAddedId(result.wbs);
     removeDeletedId(result.id);
-    saveProjectsToCache(allProjects);
+    if (result.wbs) removeDeletedId(result.wbs);
+    await saveProjectsToCache(allProjects);
 
     populateProjectSelect();
     setCurrentProject(result);
+    renderProjectsCardsAndDirectory();
     switchTab("tab-overview");
   } catch (err) {
     uploadProgressContainer.style.display = "none";
     closeUploadModal();
     showInvalidTemplateModal(
-      "ไม่สามารถติดต่อเซิร์ฟเวอร์ระบบเพื่อประมวลผล PDF ได้ (" + err.message + ") กรุณาตรวจสอบว่าเซิร์ฟเวอร์ Python กำลังทำงานอยู่ที่พอร์ต 3000",
+      "ไม่สามารถติดต่อเซิร์ฟเวอร์ระบบเพื่อประมวลผล PDF ได้ (" + err.message + ")",
       "เกิดข้อผิดพลาดในการเชื่อมต่อเซิร์ฟเวอร์"
     );
+  } finally {
+    btnConfirmUpload.disabled = false;
   }
 }
 
@@ -2871,24 +2954,28 @@ async function handleUpdateZpsr018Submit() {
       result.target_year_be = preservedFields.target_year_be;
       result.target_month_num = preservedFields.target_month_num;
     }
+    if (preservedFields.wbs && !result.wbs) result.wbs = preservedFields.wbs;
     
     // Update in allProjects
-    const idx = allProjects.findIndex(p => p.id === updateTargetProjectId);
+    const idx = allProjects.findIndex(p => p.id === updateTargetProjectId || p.wbs === updateTargetProjectId);
     if (idx >= 0) {
-      // If new parsed data has different ID, map it to old project slot
-      result.id = updateTargetProjectId;
+      // Preserve ID to maintain references
+      result.id = allProjects[idx].id;
       allProjects[idx] = result;
     } else {
       allProjects.unshift(result);
     }
     addLocalAddedId(result.id);
-    saveProjectsToCache(allProjects);
+    if (result.wbs) addLocalAddedId(result.wbs);
+    removeDeletedId(result.id);
+    if (result.wbs) removeDeletedId(result.wbs);
+    await saveProjectsToCache(allProjects);
     
     closeUpdateZpsr018Modal();
-    showToast(`อัพเดทข้อมูลงบประมาณสำเร็จแล้ว (${result.print_date || 'ล่าสุด'})`, "success");
+    showToast(`อัพเดทข้อมูลงบประมาณสำเร็จแล้ว (${result.print_date ? 'พิมพ์วันที่ ' + result.print_date : 'ล่าสุด'})`, "success");
     
     populateProjectSelect();
-    if (currentProject && currentProject.id === updateTargetProjectId) {
+    if (currentProject && (currentProject.id === updateTargetProjectId || currentProject.wbs === updateTargetProjectId)) {
       setCurrentProject(result);
     }
     renderProjectsCardsAndDirectory();
@@ -2900,6 +2987,8 @@ async function handleUpdateZpsr018Submit() {
       "ไม่สามารถติดต่อเซิร์ฟเวอร์เพื่อประมวลผล PDF ได้ (" + err.message + ")",
       "เกิดข้อผิดพลาดในการเชื่อมต่อเซิร์ฟเวอร์"
     );
+  } finally {
+    if (btnConfirm) btnConfirm.disabled = false;
   }
 }
 
@@ -2962,7 +3051,7 @@ async function handleSaveProjectName() {
       currentProject.name = newName;
       if (heroProjectName) heroProjectName.textContent = newName;
     }
-    saveProjectsToCache(allProjects);
+    await saveProjectsToCache(allProjects);
     populateProjectSelect();
     renderProjectsDirectory();
 
@@ -2979,7 +3068,7 @@ async function handleSaveProjectName() {
       currentProject.name = newName;
       if (heroProjectName) heroProjectName.textContent = newName;
     }
-    saveProjectsToCache(allProjects);
+    await saveProjectsToCache(allProjects);
     populateProjectSelect();
     renderProjectsDirectory();
     closeEditProjectNameModal();
