@@ -347,6 +347,14 @@ def parse_network_table(doc, project_id=None):
     summary_act = extract_summary_line("รวมค่าจริง")
     summary_diff = extract_summary_line("รวมผลต่าง")
 
+    # Safety Fallback: If summary lines were missing or zero, sum up from all networks
+    has_valid_summary = (len(summary_est) >= 5 and any(v != 0 for v in summary_est)) or \
+                        (len(summary_act) >= 5 and any(v != 0 for v in summary_act))
+    if not has_valid_summary and networks:
+        summary_est = [round(sum(n.get("categories", [])[idx]["estimate"] for n in networks if idx < len(n.get("categories", []))), 2) for idx in range(10)]
+        summary_act = [round(sum(n.get("categories", [])[idx]["actual"] for n in networks if idx < len(n.get("categories", []))), 2) for idx in range(10)]
+        summary_diff = [round(sum(n.get("categories", [])[idx]["diff"] for n in networks if idx < len(n.get("categories", []))), 2) for idx in range(10)]
+
     cost_categories = []
     for idx in range(10):
         cid, cname, cgrp, cgrp_name = category_defs[idx]
@@ -1194,8 +1202,9 @@ class SAPCloseHTTPHandler(http.server.SimpleHTTPRequestHandler):
 
             filename = None
             custom_name = None
+            target_project_id = None
 
-            # 1. Read filename & custom name from custom headers if provided
+            # 1. Read filename, custom name & target project ID from custom headers if provided
             if self.headers.get("X-Filename"):
                 try:
                     filename = urllib.parse.unquote(self.headers.get("X-Filename"))
@@ -1206,6 +1215,11 @@ class SAPCloseHTTPHandler(http.server.SimpleHTTPRequestHandler):
                     custom_name = urllib.parse.unquote(self.headers.get("X-Project-Name"))
                 except Exception:
                     custom_name = self.headers.get("X-Project-Name")
+            if self.headers.get("X-Project-Id"):
+                try:
+                    target_project_id = urllib.parse.unquote(self.headers.get("X-Project-Id"))
+                except Exception:
+                    target_project_id = self.headers.get("X-Project-Id")
 
             pdf_bytes = None
             if "multipart/form-data" in content_type:
@@ -1226,6 +1240,12 @@ class SAPCloseHTTPHandler(http.server.SimpleHTTPRequestHandler):
                             try:
                                 c_body = p.split(b"\r\n\r\n", 1)[1] if b"\r\n\r\n" in p else p.split(b"\n\n", 1)[1]
                                 custom_name = c_body.strip().rstrip(b"\r\n-").decode("utf-8")
+                            except Exception:
+                                pass
+                        if b'name="target_project_id"' in p and not target_project_id:
+                            try:
+                                t_body = p.split(b"\r\n\r\n", 1)[1] if b"\r\n\r\n" in p else p.split(b"\n\n", 1)[1]
+                                target_project_id = t_body.strip().rstrip(b"\r\n-").decode("utf-8")
                             except Exception:
                                 pass
 
@@ -1277,13 +1297,23 @@ class SAPCloseHTTPHandler(http.server.SimpleHTTPRequestHandler):
                     return
 
                 projects = load_projects()
-                existing_idx = next((i for i, p in enumerate(projects) if p["id"] == result["id"]), -1)
+                existing_idx = -1
+                if target_project_id:
+                    existing_idx = next((i for i, p in enumerate(projects) if p.get("id") == target_project_id or p.get("wbs") == target_project_id), -1)
+                if existing_idx < 0:
+                    existing_idx = next((i for i, p in enumerate(projects) if p.get("id") == result.get("id") or (p.get("wbs") and p.get("wbs") == result.get("wbs"))), -1)
+
                 if existing_idx >= 0:
+                    result["id"] = projects[existing_idx]["id"]
                     result["target_month"] = projects[existing_idx].get("target_month", result["target_month"])
+                    result["target_year_be"] = projects[existing_idx].get("target_year_be", result.get("target_year_be", 2569))
+                    result["target_month_num"] = projects[existing_idx].get("target_month_num", result.get("target_month_num", 9))
                     if "custom_status" in projects[existing_idx]:
                         result["custom_status"] = projects[existing_idx]["custom_status"]
                     if "status_text" in projects[existing_idx]:
                         result["status_text"] = projects[existing_idx]["status_text"]
+                    if projects[existing_idx].get("name") and not custom_name:
+                        result["name"] = projects[existing_idx]["name"]
                     projects[existing_idx] = result
                 else:
                     projects.insert(0, result)

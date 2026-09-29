@@ -875,7 +875,15 @@ function renderProjectUI() {
   }
 
   // Badges
-  if (budgetTabBadge) budgetTabBadge.textContent = isSiteDeficit ? `ติดลบ ${siteDeficitCount} หมวด` : "ปกติ";
+  if (budgetTabBadge) {
+    if (isSiteDeficit) {
+      budgetTabBadge.className = "badge-status-pill bg-danger";
+      budgetTabBadge.textContent = `ติดลบ ${siteDeficitCount} หมวด`;
+    } else {
+      budgetTabBadge.className = "badge-status-pill bg-success";
+      budgetTabBadge.textContent = "ปกติ (ไม่ต้องโอน)";
+    }
+  }
   if (matTabBadge) matTabBadge.textContent = `${withdrawCount} ขาดเบิก`;
 
   // Checklist items
@@ -1070,19 +1078,48 @@ function renderSiteBudgetTable() {
   const siteItems = cats.filter(c => siteNames.includes(c.name));
 
   const totalEstimate = siteItems.reduce((acc, c) => acc + (c.estimate || 0), 0);
-  const totalActual = siteItems.reduce((acc, c) => acc + c.actual, 0) || 1;
-  const totalDiff = siteItems.reduce((acc, c) => acc + c.diff, 0);
-  const deficitItem = siteItems.find(c => c.diff < 0);
+  const totalActual = siteItems.reduce((acc, c) => acc + (c.actual || 0), 0);
+  const totalDiff = siteItems.reduce((acc, c) => acc + (c.diff || 0), 0);
+  const deficitItems = siteItems.filter(c => c.diff < 0);
+  const totalDef = deficitItems.reduce((sum, c) => sum + Math.abs(c.diff), 0);
 
+  // Dynamic Header & Deficit Badge Styling
+  const headerEl = document.getElementById("siteBudgetPanelHeader") || document.querySelector("#siteBudgetTable")?.closest(".pea-panel")?.querySelector(".panel-header");
+  const totalDefBadge = document.getElementById("budgetTotalDeficitBadge") || document.querySelector(".deficit-total-badge");
+  const totalDefLabel = document.getElementById("budgetTotalDeficitLabel");
   const totalDefSum = document.getElementById("budgetTotalDeficitSum");
-  if (totalDefSum) {
-    const totalDef = siteItems.filter(c => c.diff < 0).reduce((sum, c) => sum + Math.abs(c.diff), 0);
-    totalDefSum.textContent = totalDef > 0 ? `-${formatMoney(totalDef)} ฿` : "0.00 ฿";
+
+  if (totalDef > 0) {
+    if (headerEl) {
+      headerEl.classList.remove("header-gradient-success");
+      headerEl.classList.add("header-gradient-danger");
+    }
+    if (totalDefBadge) {
+      totalDefBadge.classList.remove("badge-success-mode");
+    }
+    if (totalDefLabel) totalDefLabel.innerHTML = '<i class="fa-solid fa-triangle-exclamation text-danger"></i> ยอดติดลบหน้างาน:';
+    if (totalDefSum) {
+      totalDefSum.textContent = `-${formatMoney(totalDef)} ฿`;
+      totalDefSum.style.color = "#dc2626";
+    }
+  } else {
+    if (headerEl) {
+      headerEl.classList.remove("header-gradient-danger");
+      headerEl.classList.add("header-gradient-success");
+    }
+    if (totalDefBadge) {
+      totalDefBadge.classList.add("badge-success-mode");
+    }
+    if (totalDefLabel) totalDefLabel.innerHTML = '<i class="fa-solid fa-circle-check text-success"></i> สถานะงบหน้างาน:';
+    if (totalDefSum) {
+      totalDefSum.textContent = "ปกติ ไม่มียอดติดลบ (0.00 ฿)";
+      totalDefSum.style.color = "#16a34a";
+    }
   }
 
   tbody.innerHTML = "";
   siteItems.forEach((c, idx) => {
-    const pct = ((c.actual / totalActual) * 100).toFixed(1);
+    const pct = totalActual > 0 ? ((c.actual / totalActual) * 100).toFixed(1) : "0.0";
     const isNeg = c.diff < 0;
     const tr = document.createElement("tr");
     tr.innerHTML = `
@@ -1114,8 +1151,8 @@ function renderSiteBudgetTable() {
         </td>
         <td class="text-center"><strong>100%</strong></td>
         <td class="text-center">
-          <span class="pea-badge ${deficitItem ? 'badge-status' : 'badge-purple'}">
-            ${deficitItem ? `ติดลบ ${formatMoney(Math.abs(deficitItem.diff))} ฿ (ต้องโอนงบ)` : 'ยอดสุทธิพร้อมปิดงาน'}
+          <span class="check-badge ${totalDef > 0 ? 'bg-danger' : 'bg-success'}" style="padding: 0.35rem 0.75rem; font-size: 0.85rem;">
+            ${totalDef > 0 ? `<i class="fa-solid fa-triangle-exclamation"></i> ติดลบ ${formatMoney(totalDef)} ฿ (ต้องโอนงบ)` : '<i class="fa-solid fa-circle-check"></i> ยอดสุทธิปกติ ไม่มียอดติดลบ (พร้อมปิดงาน)'}
           </span>
         </td>
       </tr>
@@ -1194,8 +1231,6 @@ function renderNetworksTable() {
   if (!tbody || !currentProject) return;
 
   const nets = currentProject.networks || [];
-  const netSummary = currentProject.networks_summary || {};
-
   const totalCount = nets.length;
   const readyCount = nets.filter(n => !n.has_deficit).length;
   const deficitCount = nets.filter(n => n.has_deficit).length;
@@ -1203,9 +1238,16 @@ function renderNetworksTable() {
   const netCountTotal = document.getElementById("netCountTotal");
   const netCountPass = document.getElementById("netCountPass");
   const netCountDeficit = document.getElementById("netCountDeficit");
+  const netCountDeficitBadge = document.getElementById("netCountDeficitBadge");
   if (netCountTotal) netCountTotal.textContent = totalCount;
   if (netCountPass) netCountPass.textContent = readyCount;
   if (netCountDeficit) netCountDeficit.textContent = deficitCount;
+  if (netCountDeficitBadge) {
+    netCountDeficitBadge.className = deficitCount > 0 ? "badge-tag bg-danger" : "badge-tag bg-success";
+    netCountDeficitBadge.innerHTML = deficitCount > 0 
+      ? `<i class="fa-solid fa-circle-xmark"></i> ติดลบ: <strong id="netCountDeficit">${deficitCount}</strong>`
+      : `<i class="fa-solid fa-circle-check"></i> ติดลบ: <strong id="netCountDeficit">0</strong>`;
+  }
 
   const filterAllCount = document.getElementById("filterNetAllCount");
   const filterDeficitCount = document.getElementById("filterNetDeficitCount");
@@ -1216,6 +1258,7 @@ function renderNetworksTable() {
 
   // Update Network Root Cause Callout Alert dynamically
   const networkAlertBox = document.getElementById("networkAlertBox");
+  const networkAlertTitle = document.getElementById("networkAlertTitle");
   const networkAlertDesc = document.getElementById("networkAlertDesc");
   if (networkAlertBox && networkAlertDesc) {
     if (deficitCount > 0) {
@@ -1223,6 +1266,7 @@ function renderNetworksTable() {
       networkAlertBox.style.display = "flex";
       const iconEl = networkAlertBox.querySelector(".net-alert-icon");
       if (iconEl) iconEl.innerHTML = '<i class="fa-solid fa-triangle-exclamation"></i>';
+      if (networkAlertTitle) networkAlertTitle.innerHTML = 'ผลการวิเคราะห์เจาะลึกระดับโครงข่าย (Network Root-Cause Analysis):';
 
       const defNets = nets.filter(n => n.has_deficit);
       const defNetDetails = defNets.map(n => {
@@ -1256,9 +1300,10 @@ function renderNetworksTable() {
       networkAlertBox.style.display = "flex";
       const iconEl = networkAlertBox.querySelector(".net-alert-icon");
       if (iconEl) iconEl.innerHTML = '<i class="fa-solid fa-circle-check text-success"></i>';
+      if (networkAlertTitle) networkAlertTitle.innerHTML = '<i class="fa-solid fa-circle-check text-success"></i> ผลการวิเคราะห์ระดับโครงข่าย: ทุกโครงข่ายเป็นปกติ (ไม่มียอดติดลบ)';
       networkAlertDesc.innerHTML = `
-        โครงข่ายทั้งหมด (${totalCount} โครงข่าย) มีงบประมาณค่าใช้จ่ายหน้างานเพียงพอและไม่มีหมวดค่าใช้จ่ายที่เกินวงเงิน 
-        พร้อมสำหรับการปิดงานทางด้านการเงิน
+        โครงข่ายทั้งหมด (${totalCount} โครงข่าย) มีค่าใช้จ่ายจริงไม่เกินวงเงินงบประมาณการที่ตั้งไว้ 
+        ไม่พบรายการติดลบในทุกโครงข่าย และไม่จำเป็นต้องดำเนินการเกลี่ยหรือโอนงบประมาณข้ามโครงข่าย พร้อมสำหรับการปิดงานด้านการเงิน
       `;
     }
   }
@@ -1345,8 +1390,8 @@ function renderNetworksTable() {
           <strong>${sumSiteDiff < 0 ? '-' : '+'}${formatMoney(Math.abs(sumSiteDiff))} ฿</strong>
         </td>
         <td colspan="3" class="text-center">
-          <span class="pea-badge ${deficitCount > 0 ? 'badge-status' : 'badge-purple'}">
-            ${deficitCount > 0 ? `ติดลบ ${deficitCount} โครงข่าย (มีเงินเหลือสุทธิ)` : 'ทุกโครงข่ายพร้อมปิดงาน'}
+          <span class="check-badge ${deficitCount > 0 ? 'bg-danger' : 'bg-success'}" style="padding: 0.35rem 0.75rem; font-size: 0.85rem;">
+            ${deficitCount > 0 ? `<i class="fa-solid fa-triangle-exclamation"></i> ติดลบ ${deficitCount} โครงข่าย` : '<i class="fa-solid fa-circle-check"></i> ทุกโครงข่ายพร้อมปิดงาน (ไม่มียอดติดลบ)'}
           </span>
         </td>
       </tr>
@@ -1356,23 +1401,40 @@ function renderNetworksTable() {
 
 function renderNetworkTransferGuide() {
   const container = document.getElementById("netTransferGuideGrid");
+  const titleEl = document.getElementById("netTransferGuideTitle");
   if (!container || !currentProject) return;
 
+  const nets = currentProject.networks || [];
   const netSummary = currentProject.networks_summary || {};
   const recs = netSummary.transfer_recommendations || [];
+  const deficitCount = nets.filter(n => n.has_deficit).length;
 
-  if (recs.length === 0) {
+  if (recs.length === 0 || deficitCount === 0) {
+    if (titleEl) {
+      titleEl.innerHTML = '<i class="fa-solid fa-circle-check text-success"></i> สถานะการจัดสรรงบประมาณระดับโครงข่าย (Network Budget Status):';
+    }
     container.innerHTML = `
-      <div class="net-guide-card" style="grid-column: 1 / -1;">
-        <div class="guide-card-header">
-          <strong class="text-success"><i class="fa-solid fa-circle-check"></i> ไม่จำเป็นต้องโอนงบประมาณระดับโครงข่าย</strong>
-        </div>
-        <div class="guide-card-body">
-          <p class="text-muted">ทุกโครงข่ายมีงบประมาณคงเหลือเพียงพอและไม่มีรายการติดลบในหมวดสำคัญ</p>
+      <div class="net-guide-card card-all-clear" style="grid-column: 1 / -1; background: #f0fdf4; border: 1.5px solid #86efac; border-radius: 10px; padding: 1.25rem;">
+        <div style="display: flex; align-items: center; gap: 1rem; flex-wrap: wrap;">
+          <div style="width: 48px; height: 48px; border-radius: 50%; background: #dcfce7; display: flex; align-items: center; justify-content: center; font-size: 1.4rem; color: #16a34a; flex-shrink: 0;">
+            <i class="fa-solid fa-scale-balanced"></i>
+          </div>
+          <div style="flex: 1; min-width: 250px;">
+            <h4 style="margin: 0; color: #15803d; font-size: 1.05rem;">
+              <i class="fa-solid fa-circle-check"></i> งบประมาณทุกโครงข่ายมีความสมดุล — ไม่ต้องโอนงบประมาณระหว่างโครงข่าย
+            </h4>
+            <p style="margin: 0.35rem 0 0; color: #166534; font-size: 0.88rem; line-height: 1.5;">
+              ค่าใช้จ่ายจริงของโครงข่ายทั้งหมด ${nets.length} โครงข่าย อยู่ในเกณฑ์ควบคุม ไม่พบรายการเบิกเกินงบประมาณหรือติดลบในระดับโครงข่าย
+            </p>
+          </div>
         </div>
       </div>
     `;
     return;
+  }
+
+  if (titleEl) {
+    titleEl.innerHTML = '<i class="fa-solid fa-arrows-split-up-and-left text-gold"></i> แนวทางการโอนงบประมาณระดับโครงข่าย (Network Budget Reallocation Plan):';
   }
 
   container.innerHTML = recs.map(rec => {
@@ -1508,17 +1570,103 @@ function renderTransferRecommendations() {
 
   // Check if there are any site deficits at all
   const siteNames = ["ค่าแรงงาน / ค่าจ้างเหมา", "ค่าควบคุมงาน", "ค่าขนส่ง / ยานพาหนะ", "ค่าเบ็ดเตล็ด", "ค่าดำเนินการ"];
-  const siteDeficits = cats.filter(c => siteNames.includes(c.name) && c.diff < 0);
+  const siteItems = cats.filter(c => siteNames.includes(c.name));
+  const siteDeficits = siteItems.filter(c => c.diff < 0);
   const netDeficits = (currentProject.networks || []).filter(n => n.has_deficit);
+  const siteTotalDiff = siteItems.reduce((sum, c) => sum + (c.diff || 0), 0);
 
+  // Section 4 Elements
+  const transferSectionHeader = document.getElementById("transferSectionHeader");
+  const transferSectionTitle = document.getElementById("transferSectionTitle");
+  const transferSectionSubtitle = document.getElementById("transferSectionSubtitle");
+  const btnExportDocx = document.getElementById("btnExportApprovalDocx");
+  const btnCopyMemo = document.getElementById("btnCopyTransferMemo");
+  const noTransferBadge = document.getElementById("noTransferNeededBadge");
+  const transferPolicyBox = document.getElementById("transferPolicyBox");
+  const simulationSection = document.getElementById("simulationSection");
+
+  // CASE: NO DEFICIT AT ALL (ถ้าไม่ติดลบก็ไม่ต้องโอนอะไรแล้ว)
   if (siteDeficits.length === 0 && netDeficits.length === 0) {
+    if (transferSectionHeader) {
+      transferSectionHeader.classList.remove("header-gradient-gold");
+      transferSectionHeader.classList.add("header-gradient-success");
+    }
+    if (transferSectionTitle) {
+      transferSectionTitle.innerHTML = '<i class="fa-solid fa-circle-check text-success"></i> 4. สรุปสถานะการโอนงบประมาณหน้างาน (ไม่ต้องดำเนินการโอนงบ)';
+    }
+    if (transferSectionSubtitle) {
+      transferSectionSubtitle.textContent = 'ค่าใช้จ่ายหน้างานทุกหมวดมียอดคงเหลือเป็นบวกครบถ้วน ไม่มียอดติดลบ จึงไม่ต้องดำเนินการโอนงบประมาณในระบบ SAP และไม่ต้องจัดทำบันทึกขออนุมัติโอนงบ';
+    }
+    if (btnExportDocx) btnExportDocx.style.display = "none";
+    if (btnCopyMemo) btnCopyMemo.style.display = "none";
+    if (noTransferBadge) noTransferBadge.style.display = "inline-flex";
+    if (transferPolicyBox) transferPolicyBox.style.display = "none";
+    if (simulationSection) simulationSection.style.display = "none";
+
     container.innerHTML = `
-      <div class="p-3 text-center text-muted" style="grid-column: 1 / -1;">
-        <i class="fa-solid fa-circle-check text-success"></i> ค่าใช้จ่ายหน้างานไม่มีหมวดติดลบ ไม่จำเป็นต้องโอนงบประมาณ
+      <div class="no-transfer-needed-card">
+        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.75rem; border-bottom: 1px solid #dcfce7; padding-bottom: 1rem; margin-bottom: 1.25rem;">
+          <div style="display: flex; align-items: center; gap: 0.75rem;">
+            <span class="badge-status-pill bg-success" style="font-size: 0.85rem; padding: 0.35rem 0.85rem;"><i class="fa-solid fa-check-double"></i> ตรวจสอบผ่านเกณฑ์สมบูรณ์</span>
+            <strong style="font-size: 1.1rem; color: #14532d;"><i class="fa-solid fa-shield-halved text-success"></i> ค่าใช้จ่ายหน้างานทุกหมวดไม่ติดลบ — ไม่ต้องโอนงบประมาณใดๆ</strong>
+          </div>
+          <div style="font-size: 0.95rem; color: #15803d; font-weight: 700; background: #dcfce7; padding: 0.35rem 0.85rem; border-radius: 6px;">
+            งบคงเหลือหน้างานสุทธิ: +${formatMoney(siteTotalDiff)} บาท
+          </div>
+        </div>
+        
+        <div style="font-size: 0.88rem; color: #166534; margin-bottom: 0.85rem;">
+          <strong><i class="fa-solid fa-list-check"></i> รายละเอียดงบประมาณคงเหลือแยกตาม 5 หมวดค่าใช้จ่ายหน้างาน (มียอดคงเหลือเป็นบวกทุกหมวด):</strong>
+        </div>
+
+        <div class="site-categories-summary-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 0.85rem; margin-bottom: 1.25rem;">
+          ${siteItems.map(c => `
+            <div style="background: #ffffff; border: 1.5px solid #bbf7d0; border-radius: 8px; padding: 0.85rem 1rem; box-shadow: 0 1px 3px rgba(0,0,0,0.04);">
+              <div style="font-size: 0.82rem; color: #4b5563; font-weight: 600;">${c.name}</div>
+              <div style="font-size: 1.15rem; font-weight: 700; color: #16a34a; margin-top: 0.3rem;">
+                +${formatMoney(c.diff)} ฿
+              </div>
+              <div style="font-size: 0.75rem; color: #6b7280; margin-top: 0.2rem;">
+                ประมาณการ: ${formatMoney(c.estimate)} ฿ | จ่ายจริง: ${formatMoney(c.actual)} ฿
+              </div>
+              <div style="font-size: 0.75rem; color: #059669; font-weight: 600; margin-top: 0.3rem; display: flex; align-items: center; gap: 0.3rem;">
+                <i class="fa-solid fa-circle-check"></i> ไม่มียอดติดลบ (งบพอใช้)
+              </div>
+            </div>
+          `).join('')}
+        </div>
+
+        <div style="background: #f0fdf4; border-radius: 8px; padding: 1rem 1.25rem; border-left: 4px solid #16a34a; font-size: 0.88rem; color: #166534; line-height: 1.6;">
+          <div style="font-weight: 700; margin-bottom: 0.3rem; display: flex; align-items: center; gap: 0.4rem;">
+            <i class="fa-solid fa-circle-info text-success"></i> สรุปผลการประเมินเพื่อการปิดงาน:
+          </div>
+          <div>
+            1. <strong>ไม่ต้องโอนงบประมาณ:</strong> ไม่พบยอดเงินติดลบในหมวดค่าแรงงาน, ค่าควบคุมงาน, ค่าขนส่ง, ค่าเบ็ดเตล็ด หรือค่าดำเนินการ<br>
+            2. <strong>ไม่ต้องทำบันทึกขอโอนงบ SAP:</strong> ไม่ต้องตัดโอนงบในระบบ SAP (ไม่ต้องใช้ T-Code KB11N / CJ30)<br>
+            3. <strong>พร้อมส่งมอบงาน กส.3:</strong> ผู้ควบคุมงานสามารถจัดพิมพ์รายงานการปิดงานก่อสร้าง (กส.3) และส่งเรื่องให้ส่วนงานที่เกี่ยวข้องตรวจสอบเพื่อปิดงาน (CLSD F4) ได้ทันที
+          </div>
+        </div>
       </div>
     `;
     return;
   }
+
+  // Restore deficit UI elements if deficit exists
+  if (transferSectionHeader) {
+    transferSectionHeader.classList.remove("header-gradient-success");
+    transferSectionHeader.classList.add("header-gradient-gold");
+  }
+  if (transferSectionTitle) {
+    transferSectionTitle.innerHTML = '<i class="fa-solid fa-wand-magic-sparkles"></i> 4. แผนการโอนงบประมาณเพื่อแก้ปัญหายอดเงินติดลบหน้างาน';
+  }
+  if (transferSectionSubtitle) {
+    transferSectionSubtitle.textContent = 'วิเคราะห์การโอนงบประมาณระดับโครงข่ายและหมวดค่าใช้จ่ายหน้างาน เพื่อแก้ไขยอดเงินติดลบให้ไม่ติดลบทุกหมวดพร้อมปิดงาน';
+  }
+  if (btnExportDocx) btnExportDocx.style.display = "inline-flex";
+  if (btnCopyMemo) btnCopyMemo.style.display = "inline-flex";
+  if (noTransferBadge) noTransferBadge.style.display = "none";
+  if (transferPolicyBox) transferPolicyBox.style.display = "block";
+  if (simulationSection) simulationSection.style.display = "block";
 
   // Build plans from network-level recommendations if available
   const plans = [];
@@ -3228,6 +3376,9 @@ async function handleUpdateZpsr018Submit() {
   const formData = new FormData();
   formData.append("file", file);
   formData.append("filename", file.name);
+  if (updateTargetProjectId) {
+    formData.append("target_project_id", updateTargetProjectId);
+  }
   if (preservedFields.name) {
     formData.append("custom_project_name", preservedFields.name);
   }
@@ -3237,7 +3388,8 @@ async function handleUpdateZpsr018Submit() {
       method: "POST",
       headers: {
         "X-Filename": encodeURIComponent(file.name),
-        "X-Project-Name": encodeURIComponent(preservedFields.name || "")
+        "X-Project-Name": encodeURIComponent(preservedFields.name || ""),
+        "X-Project-Id": encodeURIComponent(updateTargetProjectId || "")
       },
       body: formData
     });
@@ -3268,7 +3420,7 @@ async function handleUpdateZpsr018Submit() {
     if (preservedFields.wbs && !result.wbs) result.wbs = preservedFields.wbs;
     
     // Update in allProjects
-    const idx = allProjects.findIndex(p => p.id === updateTargetProjectId || p.wbs === updateTargetProjectId);
+    const idx = allProjects.findIndex(p => p.id === updateTargetProjectId || p.wbs === updateTargetProjectId || p.id === result.id || p.wbs === result.wbs);
     if (idx >= 0) {
       // Preserve ID to maintain references
       result.id = allProjects[idx].id;
@@ -3285,12 +3437,18 @@ async function handleUpdateZpsr018Submit() {
     closeUpdateZpsr018Modal();
     showToast(`อัพเดทข้อมูลงบประมาณสำเร็จแล้ว (${result.print_date ? 'พิมพ์วันที่ ' + result.print_date : 'ล่าสุด'})`, "success");
     
+    // Maintain active tab (e.g. tab-budget) so user immediately sees updated values!
+    const activeTab = document.querySelector(".pea-tab-btn.active");
+    const activeTabId = activeTab ? activeTab.getAttribute("data-tab") : "tab-budget";
+
     populateProjectSelect();
-    if (currentProject && (currentProject.id === updateTargetProjectId || currentProject.wbs === updateTargetProjectId)) {
-      setCurrentProject(result);
-    }
+    setCurrentProject(result);
     renderProjectsCardsAndDirectory();
-    switchTab("tab-overview");
+    if (activeTabId) {
+      switchTab(activeTabId);
+    } else {
+      switchTab("tab-budget");
+    }
   } catch (err) {
     if (progressEl) progressEl.style.display = "none";
     closeUpdateZpsr018Modal();

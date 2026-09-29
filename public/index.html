@@ -530,14 +530,14 @@
 
       <!-- Section 1: Site Expenses (5 Categories) -->
       <div class="pea-panel mb-4">
-        <div class="panel-header header-gradient-danger">
+        <div class="panel-header header-gradient-danger" id="siteBudgetPanelHeader">
           <div class="header-title-group">
             <h3><i class="fa-solid fa-helmet-safety"></i> 1. ตารางวิเคราะห์ค่าใช้จ่ายหน้างาน (5 หมวดหลักที่ควบคุมงบประมาณ)</h3>
             <p class="subtitle">วิเคราะห์เฉพาะ: ค่าแรงงาน/ค่าจ้างเหมา, ค่าควบคุมงาน, ค่าขนส่ง/ยานพาหนะ, ค่าเบ็ดเตล็ด และค่าดำเนินการ</p>
           </div>
-          <div class="deficit-total-badge">
+          <div class="deficit-total-badge" id="budgetTotalDeficitBadge">
             <span id="budgetTotalDeficitLabel">ยอดติดลบหน้างาน:</span>
-            <strong id="budgetTotalDeficitSum">-38,550.56 ฿</strong>
+            <strong id="budgetTotalDeficitSum">-</strong>
           </div>
         </div>
         <div class="panel-body p-0">
@@ -609,9 +609,9 @@
             <p class="subtitle">วิเคราะห์งบประมาณและค่าใช้จ่ายจริงรายเลขที่โครงข่าย พร้อมชี้เป้าโครงข่ายที่เป็นสาเหตุของยอดเงินติดลบ</p>
           </div>
           <div class="network-summary-badges">
-            <span class="badge-tag bg-purple"><i class="fa-solid fa-sitemap"></i> ทั้งหมด: <strong id="netCountTotal">6</strong> โครงข่าย</span>
-            <span class="badge-tag bg-success"><i class="fa-solid fa-circle-check"></i> พร้อมปิดงาน: <strong id="netCountPass">5</strong></span>
-            <span class="badge-tag bg-danger"><i class="fa-solid fa-circle-xmark"></i> ติดลบ: <strong id="netCountDeficit">1</strong></span>
+            <span class="badge-tag bg-purple"><i class="fa-solid fa-sitemap"></i> ทั้งหมด: <strong id="netCountTotal">-</strong> โครงข่าย</span>
+            <span class="badge-tag bg-success"><i class="fa-solid fa-circle-check"></i> พร้อมปิดงาน: <strong id="netCountPass">-</strong></span>
+            <span class="badge-tag bg-danger" id="netCountDeficitBadge"><i class="fa-solid fa-circle-xmark"></i> ติดลบ: <strong id="netCountDeficit">-</strong></span>
           </div>
         </div>
         <div class="panel-body">
@@ -619,13 +619,9 @@
           <div class="network-alert-box mb-3" id="networkAlertBox">
             <div class="net-alert-icon"><i class="fa-solid fa-triangle-exclamation"></i></div>
             <div class="net-alert-text">
-              <h4>ผลการวิเคราะห์เจาะลึกระดับโครงข่าย (Network Root-Cause Analysis):</h4>
+              <h4 id="networkAlertTitle">ผลการวิเคราะห์เจาะลึกระดับโครงข่าย (Network Root-Cause Analysis):</h4>
               <p id="networkAlertDesc">
-                ยอดติดลบในหมวดค่าเบ็ดเตล็ด (-38,550.56 ฿) ของทั้งโครงการ เกิดขึ้นจาก 
-                <strong class="text-danger">โครงข่าย 6001322483 (SUB-C-I ก่อสร้างสถานีไฟฟ้าภายใน)</strong> เพียงโครงข่ายเดียว 
-                ซึ่งใช้จ่ายค่าเบ็ดเตล็ดจริง 117,017.49 ฿ เกินงบประมาณการที่ตั้งไว้ 27,934.00 ฿ ถึง 
-                <strong class="text-danger">-89,083.49 ฿</strong> และส่งผลให้ยอดรวมทั้งโครงข่ายนี้ติดลบ 
-                <strong class="text-danger">-9,317.92 ฿</strong> ในขณะที่โครงข่ายอื่นๆ อีก 5 โครงข่ายมีงบประมาณเหลือทั้งหมด
+                กำลังวิเคราะห์ข้อมูลงบประมาณรายโครงข่าย...
               </p>
             </div>
           </div>
@@ -634,13 +630,13 @@
           <div class="network-toolbar mb-3">
             <div class="net-filter-tabs">
               <button class="net-filter-btn active" data-filter="all" id="btnFilterNetAll">
-                <i class="fa-solid fa-list"></i> ทั้งหมด (<span id="filterNetAllCount">6</span>)
+                <i class="fa-solid fa-list"></i> ทั้งหมด (<span id="filterNetAllCount">-</span>)
               </button>
               <button class="net-filter-btn filter-danger" data-filter="deficit" id="btnFilterNetDeficit">
-                <i class="fa-solid fa-triangle-exclamation"></i> เฉพาะที่ติดลบ (<span id="filterNetDeficitCount">1</span>)
+                <i class="fa-solid fa-triangle-exclamation"></i> เฉพาะที่ติดลบ (<span id="filterNetDeficitCount">-</span>)
               </button>
               <button class="net-filter-btn filter-success" data-filter="ready" id="btnFilterNetReady">
-                <i class="fa-solid fa-circle-check"></i> งบไม่เกิน (<span id="filterNetReadyCount">5</span>)
+                <i class="fa-solid fa-circle-check"></i> งบไม่เกิน (<span id="filterNetReadyCount">-</span>)
               </button>
             </div>
             <div class="net-quick-hint">
@@ -677,7 +673,7 @@
 
           <!-- Inter-Network Reallocation Guide -->
           <div class="net-transfer-guide mt-4">
-            <h4 class="guide-title"><i class="fa-solid fa-arrows-split-up-and-left text-gold"></i> แนวทางการโอนงบประมาณระดับโครงข่าย (Network Budget Reallocation Plan):</h4>
+            <h4 class="guide-title" id="netTransferGuideTitle"><i class="fa-solid fa-arrows-split-up-and-left text-gold"></i> แนวทางการโอนงบประมาณระดับโครงข่าย (Network Budget Reallocation Plan):</h4>
             <div class="net-guide-grid" id="netTransferGuideGrid">
               <!-- Network transfer cards dynamically populated -->
             </div>
@@ -686,13 +682,13 @@
       </div>
 
       <!-- Section 4: Smart Transfer Recommendation for Site Deficit -->
-      <div class="pea-panel mb-4">
-        <div class="panel-header header-gradient-gold">
+      <div class="pea-panel mb-4" id="transferRecommendationPanel">
+        <div class="panel-header header-gradient-gold" id="transferSectionHeader">
           <div class="header-title-group">
-            <h3><i class="fa-solid fa-wand-magic-sparkles"></i> 4. แผนการโอนงบประมาณเพื่อแก้ปัญหายอดเงินติดลบหน้างาน</h3>
-            <p class="subtitle">วิเคราะห์การโอนงบประมาณระดับโครงข่ายและหมวดค่าใช้จ่ายหน้างาน เพื่อแก้ไขยอดเงินติดลบให้ไม่ติดลบทุกหมวดพร้อมปิดงาน</p>
+            <h3 id="transferSectionTitle"><i class="fa-solid fa-wand-magic-sparkles"></i> 4. แผนการโอนงบประมาณเพื่อแก้ปัญหายอดเงินติดลบหน้างาน</h3>
+            <p class="subtitle" id="transferSectionSubtitle">วิเคราะห์การโอนงบประมาณระดับโครงข่ายและหมวดค่าใช้จ่ายหน้างาน เพื่อแก้ไขยอดเงินติดลบให้ไม่ติดลบทุกหมวดพร้อมปิดงาน</p>
           </div>
-          <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
+          <div id="transferActionButtons" style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
             <button id="btnExportApprovalDocx" class="btn btn-sm btn-gold" title="นำข้อมูลวิเคราะห์ใส่ไฟล์แบบฟอร์มขออนุมัติค่าใช้จ่ายหน้างาน Word">
               <i class="fa-solid fa-file-word"></i> บันทึกลงแบบฟอร์มขออนุมัติ (.docx)
             </button>
@@ -702,11 +698,12 @@
             <button id="btnCopyTransferMemo" class="btn btn-sm btn-dark">
               <i class="fa-solid fa-file-pen"></i> บันทึกข้อความขอโอนงบ SAP
             </button>
+            <span id="noTransferNeededBadge" class="badge-status-pill bg-success" style="display: none; padding: 0.4rem 0.85rem;"><i class="fa-solid fa-circle-check"></i> ไม่จำเป็นต้องโอนงบประมาณ</span>
           </div>
         </div>
         <div class="panel-body">
           <!-- Policy Rules Banner -->
-          <div class="transfer-policy-box mb-4">
+          <div class="transfer-policy-box mb-4" id="transferPolicyBox">
             <div class="policy-header">
               <i class="fa-solid fa-shield-halved text-purple"></i> <strong>เงื่อนไขและระเบียบการโอนงบประมาณในระบบ SAP (กฟภ.):</strong>
             </div>
@@ -731,8 +728,8 @@
           </div>
 
           <!-- Transfer Simulation Table -->
-          <div class="simulation-section mt-4">
-            <h4 class="sim-title"><i class="fa-solid fa-calculator"></i> ตารางจำลองการโอนค่าใช้จ่าย (Transfer Simulation Detail)</h4>
+          <div class="simulation-section mt-4" id="simulationSection">
+            <h4 class="sim-title" id="simTitleHeading"><i class="fa-solid fa-calculator"></i> ตารางจำลองการโอนค่าใช้จ่าย (Transfer Simulation Detail)</h4>
             <p class="text-muted" style="font-size: 0.82rem; margin-top: -0.25rem;">แสดงรายละเอียดการโอนงบประมาณ: โอนจากโครงข่ายไหน ค่าใช้จ่ายจากไหน โอนไปโครงข่ายไหน</p>
             <div class="table-responsive">
               <table class="pea-table table-bordered">
