@@ -196,13 +196,15 @@ function initEventListeners() {
   });
 
   // Project select change
-  projectSelect.addEventListener("change", (e) => {
-    const selectedId = e.target.value;
-    const project = allProjects.find(p => p.id === selectedId);
-    if (project) {
-      setCurrentProject(project);
-    }
-  });
+  if (projectSelect) {
+    projectSelect.addEventListener("change", (e) => {
+      const selectedId = e.target.value;
+      const project = allProjects.find(p => p.id === selectedId);
+      if (project) {
+        setCurrentProject(project);
+      }
+    });
+  }
 
   // Target month save
   btnSaveTargetMonth.addEventListener("click", saveTargetMonth);
@@ -710,7 +712,7 @@ function populateProjectSelect() {
 
 function setCurrentProject(project) {
   currentProject = project;
-  projectSelect.value = project.id;
+  if (projectSelect) projectSelect.value = project.id;
   renderProjectUI();
 }
 
@@ -2593,7 +2595,7 @@ async function executeDeleteProject() {
       }
     } else {
       populateProjectSelect();
-      if (currentProject) {
+      if (currentProject && projectSelect) {
         projectSelect.value = currentProject.id;
       }
     }

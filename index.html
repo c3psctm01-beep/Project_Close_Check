@@ -16,26 +16,17 @@
   <!-- Header / Navigation Bar -->
   <header class="pea-navbar">
     <div class="nav-left">
-      <div class="pea-brand">
+      <div class="pea-brand" onclick="switchTab('tab-projects')" style="cursor: pointer;" title="คลิกเพื่อกลับหน้ารวมโครงการ">
         <div class="pea-logo-emblem">
           <i class="fa-solid fa-bolt-lightning"></i>
         </div>
         <div class="brand-text">
-          <span class="brand-org">การไฟฟ้าส่วนภูมิภาค (PEA)</span>
           <h1 class="brand-title">ระบบตรวจสอบการปิดงานก่อสร้าง SAP (ZPSR018 / ZBUDR018)</h1>
         </div>
       </div>
     </div>
     
     <div class="nav-right">
-      <!-- Project Selector -->
-      <div class="project-selector-wrapper">
-        <label for="projectSelect"><i class="fa-solid fa-diagram-project"></i> เลือกโครงการ:</label>
-        <select id="projectSelect" class="pea-select">
-          <option value="">กำลังโหลดโครงการ...</option>
-        </select>
-      </div>
-
       <!-- Action Buttons -->
       <button id="btnUploadModal" class="btn btn-gold">
         <i class="fa-solid fa-cloud-arrow-up"></i> อัปโหลดไฟล์ SAP PDF
@@ -55,7 +46,7 @@
         <div class="hero-top">
           <div class="project-title-group">
             <div class="badge-row">
-              <button class="btn btn-xs btn-outline-purple" onclick="switchTab('tab-projects')" style="margin-right: 0.35rem;" title="กลับไปยังหน้ารวมโครงการทั้งหมด">
+              <button class="btn btn-xs btn-outline-purple btn-back-hub" onclick="switchTab('tab-projects')" style="margin-right: 0.35rem;" title="กลับไปยังหน้ารวมโครงการทั้งหมด">
                 <i class="fa-solid fa-arrow-left"></i> หน้ารวมโครงการ
               </button>
               <span class="pea-badge badge-purple" id="templateBadge"><i class="fa-solid fa-file-invoice"></i> TEMPLATE SAP ZPSR018</span>
@@ -64,6 +55,15 @@
               <button class="btn btn-xs btn-outline-purple" id="btnChangeStatusHero" title="กดเปลี่ยน/แสดงสถานะเพิ่มเติม" onclick="if(currentProject) openChangeStatusModal(currentProject.id)">
                 <i class="fa-solid fa-tags"></i> กำหนดสถานะ
               </button>
+
+              <!-- Quick Project Switcher in Hero -->
+              <div class="project-quick-switcher" title="สลับไปยังโครงการอื่น">
+                <label for="projectSelect"><i class="fa-solid fa-arrows-rotate"></i> สลับโครงการ:</label>
+                <select id="projectSelect" class="pea-select-sm">
+                  <option value="">กำลังโหลดโครงการ...</option>
+                </select>
+              </div>
+
               <button id="btnUpdateZpsr018" class="btn btn-xs btn-outline-gold" title="อัพเดทไฟล์ ZPSR018 ใหม่ (งบประมาณปรับปรุง/โอน)" style="margin-left: auto;" onclick="if(currentProject) openUpdateZpsr018Modal(currentProject.id)">
                 <i class="fa-solid fa-arrows-rotate"></i> อัพเดทไฟล์ ZPSR018
               </button>
@@ -219,29 +219,27 @@
         </div>
       </div>
     </section>
-  </div><!-- End #projectDetailHeroSection -->
 
-    <!-- Navigation Tabs -->
-    <div class="tabs-nav-container">
-      <button class="tab-btn active" data-tab="tab-projects" id="tabBtnProjects">
-        <i class="fa-solid fa-grip"></i> 1. ทะเบียนโครงการ (หน้าแรก)
-        <span class="tab-badge badge-purple" id="hubProjectsBadge">0</span>
-      </button>
-      <button class="tab-btn" data-tab="tab-overview" id="tabBtnOverview">
-        <i class="fa-solid fa-chart-pie"></i> 2. ภาพรวมสถานะปิดงาน
-      </button>
-      <button class="tab-btn" data-tab="tab-budget" id="tabBtnBudget">
-        <i class="fa-solid fa-money-bill-transfer"></i> 3. วิเคราะห์ค่าใช้จ่ายหน้างาน & โอนงบ
-        <span class="tab-badge badge-danger" id="budgetTabBadge">ปกติ</span>
-      </button>
-      <button class="tab-btn" data-tab="tab-materials" id="tabBtnMaterials">
-        <i class="fa-solid fa-boxes-stacked"></i> 4. วิเคราะห์อุปกรณ์ (ส่งคืน / เบิกออก)
-        <span class="tab-badge badge-warning" id="matTabBadge">0 ขาดเบิก</span>
-      </button>
-      <button class="tab-btn" data-tab="tab-all-materials" id="tabBtnAllMaterials">
-        <i class="fa-solid fa-table-list"></i> 5. ทะเบียนพัสดุทั้งหมด
-      </button>
+    <!-- Navigation Tabs (Project Details Workspace - Modern Segmented Control) -->
+    <div class="project-tabs-wrapper">
+      <nav class="tabs-nav-container project-segmented-control" aria-label="แถบเมนูการตรวจสอบโครงการ">
+        <button class="tab-btn active" data-tab="tab-overview" id="tabBtnOverview">
+          <i class="fa-solid fa-chart-pie"></i> ภาพรวมสถานะปิดงาน
+        </button>
+        <button class="tab-btn" data-tab="tab-budget" id="tabBtnBudget">
+          <i class="fa-solid fa-money-bill-transfer"></i> วิเคราะห์ค่าใช้จ่ายหน้างาน & โอนงบ
+          <span class="tab-badge badge-danger" id="budgetTabBadge">ปกติ</span>
+        </button>
+        <button class="tab-btn" data-tab="tab-materials" id="tabBtnMaterials">
+          <i class="fa-solid fa-boxes-stacked"></i> วิเคราะห์อุปกรณ์ (ส่งคืน / เบิกออก)
+          <span class="tab-badge badge-warning" id="matTabBadge">0 ขาดเบิก</span>
+        </button>
+        <button class="tab-btn" data-tab="tab-all-materials" id="tabBtnAllMaterials">
+          <i class="fa-solid fa-table-list"></i> ทะเบียนพัสดุทั้งหมด
+        </button>
+      </nav>
     </div>
+  </div><!-- End #projectDetailHeroSection -->
 
     <!-- Tab 1: Projects Hub & Cards (Front Page / Landing) -->
     <section id="tab-projects" class="tab-content active">
