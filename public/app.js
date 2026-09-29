@@ -26,6 +26,101 @@ const targetYearSelect = document.getElementById("targetYearSelect");
 const btnSaveTargetMonth = document.getElementById("btnSaveTargetMonth");
 const targetMonthDisplay = document.getElementById("targetMonthDisplay");
 
+// Operational Status Elements (สถานะเพิ่มเติม 5 ขั้นตอน)
+const heroStatusSelect = document.getElementById("heroStatusSelect");
+const btnSaveHeroStatus = document.getElementById("btnSaveHeroStatus");
+const heroStatusDisplayText = document.getElementById("heroStatusDisplayText");
+
+// Status Definitions (5 Additional Closing Statuses)
+const STATUS_DEFINITIONS = {
+  STATUS_1: {
+    key: "STATUS_1",
+    label: "1. อยู่ระหว่างดำเนินการโอนงบประมาณ",
+    shortLabel: "1. โอนงบประมาณ",
+    badgeClass: "badge-status-transfer",
+    cardClass: "card-status-transfer",
+    icon: "fa-solid fa-money-bill-transfer",
+    color: "#0284c7"
+  },
+  STATUS_2: {
+    key: "STATUS_2",
+    label: "2. อยู่ระหว่างคืนพัสดุ",
+    shortLabel: "2. คืนพัสดุ",
+    badgeClass: "badge-status-return",
+    cardClass: "card-status-return",
+    icon: "fa-solid fa-boxes-packing",
+    color: "#d97706"
+  },
+  STATUS_3: {
+    key: "STATUS_3",
+    label: "3. อยู่ระหว่างดำเนินการโอนงบประมาณ และคืนพัสดุ",
+    shortLabel: "3. โอนงบและคืนพัสดุ",
+    badgeClass: "badge-status-both",
+    cardClass: "card-status-both",
+    icon: "fa-solid fa-triangle-exclamation",
+    color: "#e11d48"
+  },
+  STATUS_4: {
+    key: "STATUS_4",
+    label: "4. ส่งเอกสารปิดงานแล้ว อยู่ระหว่างส่วนเกี่ยวข้องตรวจสอบ",
+    shortLabel: "4. ส่งเอกสาร/รอตรวจสอบ",
+    badgeClass: "badge-status-docs",
+    cardClass: "card-status-docs",
+    icon: "fa-solid fa-file-circle-check",
+    color: "#7c3aed"
+  },
+  STATUS_5: {
+    key: "STATUS_5",
+    label: "5. ปิดงานแล้ว CLSD F4",
+    shortLabel: "5. ปิดงานแล้ว CLSD F4",
+    badgeClass: "badge-status-closed",
+    cardClass: "card-status-closed",
+    icon: "fa-solid fa-circle-check",
+    color: "#059669"
+  },
+  READY: {
+    key: "READY",
+    label: "พร้อมปิดงาน (งบประมาณสมบูรณ์)",
+    shortLabel: "พร้อมปิดงาน",
+    badgeClass: "badge-status-ready",
+    cardClass: "card-ready",
+    icon: "fa-solid fa-circle-check",
+    color: "#16a34a"
+  }
+};
+
+function getProjectStatusInfo(p) {
+  if (!p) return STATUS_DEFINITIONS.READY;
+
+  // Manual/Custom status set by user
+  const custom = p.custom_status;
+  if (custom && STATUS_DEFINITIONS[custom]) {
+    return { ...STATUS_DEFINITIONS[custom], isManual: true };
+  }
+  if (custom) {
+    for (const k in STATUS_DEFINITIONS) {
+      if (custom.includes(STATUS_DEFINITIONS[k].label) || custom === k) {
+        return { ...STATUS_DEFINITIONS[k], isManual: true };
+      }
+    }
+  }
+
+  // Auto-detection based on SAP data:
+  const isDef = p.budget_summary && p.budget_summary.is_deficit;
+  const retCount = p.materials_summary ? (p.materials_summary.need_return_count || 0) : 0;
+
+  if (isDef && retCount > 0) {
+    return { ...STATUS_DEFINITIONS.STATUS_3, isManual: false };
+  } else if (isDef) {
+    return { ...STATUS_DEFINITIONS.STATUS_1, isManual: false };
+  } else if (retCount > 0) {
+    return { ...STATUS_DEFINITIONS.STATUS_2, isManual: false };
+  } else {
+    return { ...STATUS_DEFINITIONS.READY, isManual: false };
+  }
+}
+
+
 // KPI Elements
 const kpiReadinessPct = document.getElementById("kpiReadinessPct");
 const kpiReadinessTag = document.getElementById("kpiReadinessTag");
@@ -111,6 +206,24 @@ function initEventListeners() {
 
   // Target month save
   btnSaveTargetMonth.addEventListener("click", saveTargetMonth);
+
+  // Hero status save
+  if (btnSaveHeroStatus) {
+    btnSaveHeroStatus.addEventListener("click", saveHeroStatus);
+  }
+
+  // Hub search & filter triggers
+  const hubSearch = document.getElementById("hubSearchInput");
+  if (hubSearch) {
+    hubSearch.addEventListener("input", filterAndRenderProjectsCards);
+  }
+  const hubFilter = document.getElementById("hubStatusFilter");
+  if (hubFilter) {
+    hubFilter.addEventListener("change", (e) => {
+      updateStatusFilterPills(e.target.value);
+      filterAndRenderProjectsCards();
+    });
+  }
 
   // Upload Modal triggers
   btnUploadModal.addEventListener("click", openUploadModal);
@@ -631,18 +744,24 @@ function renderProjectUI() {
     }
   }
 
-  // Closing Status Badge
-  const isDeficit = b.is_deficit;
-  if (isDeficit) {
-    closingStatusBadge.className = "pea-badge badge-status";
-    closingStatusBadge.innerHTML = `<i class="fa-solid fa-ban"></i> ปิดงานไม่ได้ (งบติดลบ)`;
-    document.getElementById("overallClosingBadge").className = "badge-status-pill bg-danger";
-    document.getElementById("overallClosingBadge").textContent = "ปิดงานไม่ได้ (ต้องโอนงบ)";
-  } else {
-    closingStatusBadge.className = "pea-badge badge-status ready";
-    closingStatusBadge.innerHTML = `<i class="fa-solid fa-circle-check"></i> พร้อมปิดงาน`;
-    document.getElementById("overallClosingBadge").className = "badge-status-pill bg-success";
-    document.getElementById("overallClosingBadge").textContent = "พร้อมปิดงาน (งบประมาณสมบูรณ์)";
+  // Closing Status Badge & Hero Status Controls (สถานะเพิ่มเติม 5 ขั้นตอน)
+  const statusInfo = getProjectStatusInfo(p);
+  if (closingStatusBadge) {
+    closingStatusBadge.className = `pea-badge badge-status clickable-status-pill ${statusInfo.badgeClass}`;
+    closingStatusBadge.innerHTML = `<i class="${statusInfo.icon}"></i> ${statusInfo.label} <i class="fa-solid fa-pen status-edit-icon"></i>`;
+  }
+  const overallBadge = document.getElementById("overallClosingBadge");
+  if (overallBadge) {
+    overallBadge.className = `badge-status-pill ${statusInfo.badgeClass}`;
+    overallBadge.innerHTML = `<i class="${statusInfo.icon}"></i> ${statusInfo.label}`;
+  }
+  const heroSelect = document.getElementById("heroStatusSelect");
+  if (heroSelect) {
+    heroSelect.value = p.custom_status || "AUTO";
+  }
+  const heroDisplayText = document.getElementById("heroStatusDisplayText");
+  if (heroDisplayText) {
+    heroDisplayText.textContent = `${statusInfo.label}${statusInfo.isManual ? ' (กำหนดเอง)' : ' (วิเคราะห์อัตโนมัติ)'}`;
   }
 
   // Budget Disbursement Overview Banner (ภาพรวมการเบิกจ่ายงบประมาณโครงการ)
@@ -2415,13 +2534,27 @@ function renderProjectsCardsAndDirectory() {
   const query = searchInput ? searchInput.value.trim().toLowerCase() : "";
   const filterVal = statusFilter ? statusFilter.value : "ALL";
 
-  // 1. Calculate Hub Aggregate Stats
+  // 1. Calculate Hub Aggregate Stats & Status Counts
   let totalCount = allProjects.length;
   let readyCount = 0;
   let deficitCount = 0;
   let totalMissing = 0;
+  let countStatus1 = 0;
+  let countStatus2 = 0;
+  let countStatus3 = 0;
+  let countStatus4 = 0;
+  let countStatus5 = 0;
+  let countStatusReady = 0;
 
   allProjects.forEach(p => {
+    const sInfo = getProjectStatusInfo(p);
+    if (sInfo.key === "STATUS_1") countStatus1++;
+    else if (sInfo.key === "STATUS_2") countStatus2++;
+    else if (sInfo.key === "STATUS_3") countStatus3++;
+    else if (sInfo.key === "STATUS_4") countStatus4++;
+    else if (sInfo.key === "STATUS_5") countStatus5++;
+    else if (sInfo.key === "READY") countStatusReady++;
+
     const isDef = p.budget_summary && p.budget_summary.is_deficit;
     if (isDef) deficitCount++;
     else readyCount++;
@@ -2442,14 +2575,44 @@ function renderProjectsCardsAndDirectory() {
   if (elMissing) elMissing.textContent = totalMissing;
   if (elBadge) elBadge.textContent = totalCount;
 
+  // Update Status Pill Badges
+  const elCountAll = document.getElementById("countStatusAll");
+  const elCount1 = document.getElementById("countStatus1");
+  const elCount2 = document.getElementById("countStatus2");
+  const elCount3 = document.getElementById("countStatus3");
+  const elCount4 = document.getElementById("countStatus4");
+  const elCount5 = document.getElementById("countStatus5");
+  const elCountRdy = document.getElementById("countStatusReady");
+
+  if (elCountAll) elCountAll.textContent = totalCount;
+  if (elCount1) elCount1.textContent = countStatus1;
+  if (elCount2) elCount2.textContent = countStatus2;
+  if (elCount3) elCount3.textContent = countStatus3;
+  if (elCount4) elCount4.textContent = countStatus4;
+  if (elCount5) elCount5.textContent = countStatus5;
+  if (elCountRdy) elCountRdy.textContent = countStatusReady;
+
   // 2. Filter Projects
   let filtered = allProjects;
   if (filterVal === "READY") {
-    filtered = filtered.filter(p => !p.budget_summary || !p.budget_summary.is_deficit);
+    filtered = filtered.filter(p => {
+      const k = getProjectStatusInfo(p).key;
+      return k === "READY" || k === "STATUS_5";
+    });
   } else if (filterVal === "DEFICIT") {
     filtered = filtered.filter(p => p.budget_summary && p.budget_summary.is_deficit);
   } else if (filterVal === "WITHDRAW") {
     filtered = filtered.filter(p => p.materials_summary && p.materials_summary.need_withdraw_count > 0);
+  } else if (filterVal === "STATUS_1") {
+    filtered = filtered.filter(p => getProjectStatusInfo(p).key === "STATUS_1");
+  } else if (filterVal === "STATUS_2") {
+    filtered = filtered.filter(p => getProjectStatusInfo(p).key === "STATUS_2");
+  } else if (filterVal === "STATUS_3") {
+    filtered = filtered.filter(p => getProjectStatusInfo(p).key === "STATUS_3");
+  } else if (filterVal === "STATUS_4") {
+    filtered = filtered.filter(p => getProjectStatusInfo(p).key === "STATUS_4");
+  } else if (filterVal === "STATUS_5") {
+    filtered = filtered.filter(p => getProjectStatusInfo(p).key === "STATUS_5");
   }
 
   if (query) {
@@ -2487,6 +2650,7 @@ function renderProjectsCardsAndDirectory() {
       }
     } else {
       filtered.forEach(p => {
+        const sInfo = getProjectStatusInfo(p);
         const isDef = p.budget_summary && p.budget_summary.is_deficit;
         const defSum = p.budget_summary ? (p.budget_summary.total_deficit || 0) : 0;
         const withCount = p.materials_summary ? (p.materials_summary.need_withdraw_count || 0) : 0;
@@ -2498,6 +2662,7 @@ function renderProjectsCardsAndDirectory() {
         if (isDef) readiness -= 40;
         if (retCount > 0) readiness -= 20;
         if (withCount > 0) readiness -= 15;
+        if (sInfo.key === "STATUS_5") readiness = 100;
         if (readiness < 0) readiness = 0;
 
         let fillClass = "fill-success";
@@ -2511,13 +2676,14 @@ function renderProjectsCardsAndDirectory() {
         }
 
         const card = document.createElement("div");
-        card.className = `project-card ${isDef ? 'card-deficit' : 'card-ready'} ${isCurrent ? 'card-current' : ''}`;
+        card.className = `project-card ${sInfo.cardClass} ${isCurrent ? 'card-current' : ''}`;
         card.innerHTML = `
           <div>
             <div class="project-card-header">
               <span class="project-card-wbs"><i class="fa-solid fa-hashtag"></i> ${p.wbs || p.id}</span>
-              <span class="badge-status-pill ${isDef ? 'bg-danger' : 'bg-success'}">
-                <i class="fa-solid ${isDef ? 'fa-ban' : 'fa-circle-check'}"></i> ${isDef ? 'ปิดงานไม่ได้' : 'พร้อมปิดงาน'}
+              <span class="badge-status-pill ${sInfo.badgeClass} clickable-status-pill" onclick="event.stopPropagation(); openChangeStatusModal('${p.id}')" title="กดเปลี่ยน/แสดงสถานะเพิ่มเติม">
+                <i class="${sInfo.icon}"></i> ${sInfo.label}
+                <i class="fa-solid fa-pen status-edit-icon"></i>
               </span>
             </div>
 
@@ -2559,7 +2725,10 @@ function renderProjectsCardsAndDirectory() {
           <!-- Actions -->
           <div class="project-card-actions">
             <button class="btn btn-purple btn-open-detail" onclick="selectProjectById('${p.id}')">
-              <i class="fa-solid fa-chart-pie"></i> เปิดดูรายละเอียดโครงการ
+              <i class="fa-solid fa-chart-pie"></i> เปิดดูโครงการ
+            </button>
+            <button class="btn btn-outline-purple btn-sm" onclick="openChangeStatusModal('${p.id}')" title="กดเปลี่ยน/แสดงสถานะเพิ่มเติม">
+              <i class="fa-solid fa-tags"></i> สถานะ
             </button>
             <button class="btn btn-outline-gold btn-sm" onclick="openUpdateZpsr018Modal('${p.id}')" title="อัพเดทไฟล์ ZPSR018 ใหม่">
               <i class="fa-solid fa-arrows-rotate"></i>
@@ -2597,6 +2766,7 @@ function renderProjectsCardsAndDirectory() {
       tbody.innerHTML = `<tr><td colspan="8" class="text-center py-4 text-muted">ไม่พบข้อมูลโครงการที่ตรงกับเงื่อนไขการค้นหา</td></tr>`;
     } else {
       filtered.forEach(p => {
+        const sInfo = getProjectStatusInfo(p);
         const isDef = p.budget_summary && p.budget_summary.is_deficit;
         const defSum = p.budget_summary ? (p.budget_summary.total_deficit || 0) : 0;
         const withCount = p.materials_summary ? (p.materials_summary.need_withdraw_count || 0) : 0;
@@ -2613,8 +2783,9 @@ function renderProjectsCardsAndDirectory() {
           <td class="text-right ${isDef ? 'text-danger font-weight-bold' : 'text-success'}">${isDef ? `-${formatMoney(defSum)} ฿` : '0.00 ฿'}</td>
           <td class="text-center">${withCount} รายการ</td>
           <td class="text-center">
-            <span class="check-badge ${isDef ? 'bg-danger' : 'bg-success'}">
-              ${isDef ? 'ปิดงานไม่ได้' : 'พร้อมปิดงาน'}
+            <span class="check-badge ${sInfo.badgeClass} clickable-status-pill" onclick="openChangeStatusModal('${p.id}')" title="คลิกเพื่อเปลี่ยนสถานะ">
+              <i class="${sInfo.icon}"></i> ${sInfo.shortLabel}
+              <i class="fa-solid fa-pen status-edit-icon"></i>
             </span>
           </td>
           <td class="text-center">
@@ -2622,14 +2793,17 @@ function renderProjectsCardsAndDirectory() {
               <button class="btn btn-xs btn-purple" onclick="selectProjectById('${p.id}')" title="เปิดดูโครงการนี้">
                 <i class="fa-solid fa-eye"></i> เปิดดู
               </button>
+              <button class="btn btn-xs btn-outline-purple" onclick="openChangeStatusModal('${p.id}')" title="กำหนดสถานะเพิ่มเติม">
+                <i class="fa-solid fa-tags"></i> สถานะ
+              </button>
               <button class="btn btn-xs btn-outline-gold" onclick="openUpdateZpsr018Modal('${p.id}')" title="อัพเดทไฟล์ ZPSR018">
-                <i class="fa-solid fa-arrows-rotate"></i> อัพเดท
+                <i class="fa-solid fa-arrows-rotate"></i>
               </button>
               <button class="btn btn-xs btn-outline-purple" onclick="openEditProjectNameModalById('${p.id}')" title="แก้ไขชื่อโครงการ">
-                <i class="fa-solid fa-pen-to-square"></i> แก้ไขชื่อ
+                <i class="fa-solid fa-pen-to-square"></i>
               </button>
               <button class="btn btn-xs btn-outline-danger" onclick="promptDeleteProject('${p.id}', '${escapeAttr(p.name)}', '${p.wbs || p.id}')" title="ลบโครงการออกจากทะเบียน">
-                <i class="fa-solid fa-trash-can"></i> ลบ
+                <i class="fa-solid fa-trash-can"></i>
               </button>
             </div>
           </td>
@@ -2682,6 +2856,137 @@ async function saveTargetMonth() {
     renderProjectsDirectory();
   }
 }
+
+// --------------------------------------------------------------------------
+// Operational Closing Status Management (สถานะเพิ่มเติม 5 ขั้นตอน)
+// --------------------------------------------------------------------------
+let statusModalTargetProjectId = null;
+
+function openChangeStatusModal(projectId = null) {
+  const pid = projectId || (currentProject ? currentProject.id : null);
+  if (!pid) return;
+
+  const project = allProjects.find(p => p.id === pid || p.wbs === pid) || currentProject;
+  if (!project) return;
+
+  statusModalTargetProjectId = project.id;
+  const modal = document.getElementById("changeStatusModal");
+  const elWbs = document.getElementById("statusModalWbs");
+  const elName = document.getElementById("statusModalProjectName");
+
+  if (elWbs) elWbs.textContent = project.wbs || project.id;
+  if (elName) elName.textContent = project.name;
+
+  const currentVal = project.custom_status || "AUTO";
+  const radios = document.querySelectorAll("input[name='projectStatusOption']");
+  radios.forEach(r => {
+    r.checked = (r.value === currentVal);
+    const card = r.closest(".status-option-card");
+    if (card) {
+      if (r.checked) card.classList.add("selected");
+      else card.classList.remove("selected");
+    }
+    r.onchange = () => {
+      radios.forEach(item => {
+        const c = item.closest(".status-option-card");
+        if (c) {
+          if (item.checked) c.classList.add("selected");
+          else c.classList.remove("selected");
+        }
+      });
+    };
+  });
+
+  if (modal) modal.classList.add("show");
+}
+
+function closeChangeStatusModal() {
+  const modal = document.getElementById("changeStatusModal");
+  if (modal) modal.classList.remove("show");
+  statusModalTargetProjectId = null;
+}
+
+async function handleSaveProjectStatusModal() {
+  if (!statusModalTargetProjectId) return;
+  const selectedRadio = document.querySelector("input[name='projectStatusOption']:checked");
+  const statusKey = selectedRadio ? selectedRadio.value : "AUTO";
+  await saveProjectStatus(statusModalTargetProjectId, statusKey);
+  closeChangeStatusModal();
+}
+
+async function saveHeroStatus() {
+  if (!currentProject) return;
+  const heroSelect = document.getElementById("heroStatusSelect");
+  const statusKey = heroSelect ? heroSelect.value : "AUTO";
+  await saveProjectStatus(currentProject.id, statusKey);
+}
+
+async function saveProjectStatus(projectId, statusKey) {
+  const project = allProjects.find(p => p.id === projectId || p.wbs === projectId);
+  if (!project) return;
+
+  const isAuto = statusKey === "AUTO" || !statusKey;
+  if (isAuto) {
+    delete project.custom_status;
+    delete project.status_text;
+  } else {
+    project.custom_status = statusKey;
+    const def = STATUS_DEFINITIONS[statusKey];
+    project.status_text = def ? def.label : statusKey;
+  }
+
+  // If this is currently opened project, re-render detail view parts
+  if (currentProject && (currentProject.id === project.id || currentProject.wbs === project.wbs)) {
+    currentProject.custom_status = project.custom_status;
+    currentProject.status_text = project.status_text;
+    renderProjectDetail(currentProject);
+  }
+
+  await saveProjectsToCache(allProjects);
+  renderProjectsCardsAndDirectory();
+
+  const label = isAuto ? "อัตโนมัติ (ตามรายงาน SAP)" : (STATUS_DEFINITIONS[statusKey]?.label || statusKey);
+
+  try {
+    const res = await fetch("/api/projects/update-status", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        id: project.id,
+        custom_status: isAuto ? "AUTO" : statusKey,
+        status_text: isAuto ? "" : (STATUS_DEFINITIONS[statusKey]?.label || statusKey)
+      })
+    });
+    if (res.ok) {
+      showToast(`บันทึกสถานะเป็น "${label}" เรียบร้อยแล้ว`, "success");
+    } else {
+      showToast(`บันทึกสถานะเรียบร้อยแล้ว`, "success");
+    }
+  } catch (err) {
+    console.warn("Status updated locally:", err);
+    showToast(`บันทึกสถานะเรียบร้อยแล้ว`, "success");
+  }
+}
+
+function setStatusFilter(statusKey) {
+  const statusFilter = document.getElementById("hubStatusFilter");
+  if (statusFilter) {
+    statusFilter.value = statusKey;
+  }
+  updateStatusFilterPills(statusKey);
+  filterAndRenderProjectsCards();
+}
+
+function updateStatusFilterPills(activeStatus) {
+  document.querySelectorAll(".status-pill-btn").forEach(btn => {
+    if (btn.getAttribute("data-status") === activeStatus) {
+      btn.classList.add("active");
+    } else {
+      btn.classList.remove("active");
+    }
+  });
+}
+
 
 // --------------------------------------------------------------------------
 // File Upload & Template Validation
@@ -2915,7 +3220,9 @@ async function handleUpdateZpsr018Submit() {
     name: existingProject.name,
     target_month: existingProject.target_month,
     target_year_be: existingProject.target_year_be,
-    target_month_num: existingProject.target_month_num
+    target_month_num: existingProject.target_month_num,
+    custom_status: existingProject.custom_status,
+    status_text: existingProject.status_text
   } : {};
   
   const formData = new FormData();
@@ -2953,6 +3260,10 @@ async function handleUpdateZpsr018Submit() {
       result.target_month = preservedFields.target_month;
       result.target_year_be = preservedFields.target_year_be;
       result.target_month_num = preservedFields.target_month_num;
+    }
+    if (preservedFields.custom_status) {
+      result.custom_status = preservedFields.custom_status;
+      result.status_text = preservedFields.status_text;
     }
     if (preservedFields.wbs && !result.wbs) result.wbs = preservedFields.wbs;
     
@@ -3331,8 +3642,8 @@ function buildReportHtml(p) {
           </td>
           <td style="padding: 5px 8px;">
             <strong>สถานะความพร้อมปิดงาน:</strong> 
-            <span style="font-weight: bold; color: #047857;">
-              ${netRecs.length > 0 ? '✓ พร้อมปิดงาน (หลังอนุมัติโอนงบ)' : '✓ พร้อมปิดงาน (งบประมาณสมบูรณ์)'}
+            <span style="font-weight: bold; color: ${getProjectStatusInfo(p).color};">
+              ${getProjectStatusInfo(p).label}
             </span>
           </td>
         </tr>

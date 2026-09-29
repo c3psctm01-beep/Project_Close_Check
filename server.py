@@ -1280,6 +1280,10 @@ class SAPCloseHTTPHandler(http.server.SimpleHTTPRequestHandler):
                 existing_idx = next((i for i, p in enumerate(projects) if p["id"] == result["id"]), -1)
                 if existing_idx >= 0:
                     result["target_month"] = projects[existing_idx].get("target_month", result["target_month"])
+                    if "custom_status" in projects[existing_idx]:
+                        result["custom_status"] = projects[existing_idx]["custom_status"]
+                    if "status_text" in projects[existing_idx]:
+                        result["status_text"] = projects[existing_idx]["status_text"]
                     projects[existing_idx] = result
                 else:
                     projects.insert(0, result)
@@ -1340,6 +1344,36 @@ class SAPCloseHTTPHandler(http.server.SimpleHTTPRequestHandler):
             match = next((p for p in projects if p["id"] == pid), None)
             if match:
                 match["target_month"] = target_month
+                save_projects(projects)
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json; charset=utf-8")
+                self.end_headers()
+                self.wfile.write(json.dumps({"success": True, "project": match}, ensure_ascii=False).encode("utf-8"))
+            else:
+                self.send_response(404)
+                self.send_header("Content-Type", "application/json; charset=utf-8")
+                self.end_headers()
+                self.wfile.write(json.dumps({"error": "Project not found"}).encode("utf-8"))
+            return
+
+        if url.path == "/api/projects/update-status":
+            content_length = int(self.headers.get("Content-Length", 0))
+            body = self.rfile.read(content_length).decode("utf-8")
+            data = json.loads(body)
+            pid = data.get("id")
+            custom_status = data.get("custom_status")
+            status_text = data.get("status_text")
+
+            projects = load_projects()
+            match = next((p for p in projects if p.get("id") == pid or p.get("wbs") == pid), None)
+            if match:
+                if custom_status == "AUTO" or not custom_status:
+                    match.pop("custom_status", None)
+                    match.pop("status_text", None)
+                else:
+                    match["custom_status"] = custom_status
+                    if status_text:
+                        match["status_text"] = status_text
                 save_projects(projects)
                 self.send_response(200)
                 self.send_header("Content-Type", "application/json; charset=utf-8")

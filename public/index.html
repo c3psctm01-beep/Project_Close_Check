@@ -60,7 +60,10 @@
               </button>
               <span class="pea-badge badge-purple" id="templateBadge"><i class="fa-solid fa-file-invoice"></i> TEMPLATE SAP ZPSR018</span>
               <span class="pea-badge badge-wbs" id="wbsBadge"><i class="fa-solid fa-hashtag"></i> WBS: <strong id="heroWbs">-</strong></span>
-              <span class="pea-badge badge-status" id="closingStatusBadge"><i class="fa-solid fa-circle-exclamation"></i> รอตรวจสอบ</span>
+              <span class="pea-badge badge-status clickable-status-pill" id="closingStatusBadge" onclick="if(currentProject) openChangeStatusModal(currentProject.id)" title="คลิกเพื่อกดเปลี่ยนสถานะเพิ่มเติม"><i class="fa-solid fa-circle-exclamation"></i> รอตรวจสอบ <i class="fa-solid fa-pen status-edit-icon"></i></span>
+              <button class="btn btn-xs btn-outline-purple" id="btnChangeStatusHero" title="กดเปลี่ยน/แสดงสถานะเพิ่มเติม" onclick="if(currentProject) openChangeStatusModal(currentProject.id)">
+                <i class="fa-solid fa-tags"></i> กำหนดสถานะ
+              </button>
               <button id="btnUpdateZpsr018" class="btn btn-xs btn-outline-gold" title="อัพเดทไฟล์ ZPSR018 ใหม่ (งบประมาณปรับปรุง/โอน)" style="margin-left: auto;" onclick="if(currentProject) openUpdateZpsr018Modal(currentProject.id)">
                 <i class="fa-solid fa-arrows-rotate"></i> อัพเดทไฟล์ ZPSR018
               </button>
@@ -81,41 +84,70 @@
           </div>
         </div>
 
-        <!-- Target Closing Month Control Box -->
-        <div class="target-closing-panel">
-          <div class="target-panel-header">
-            <i class="fa-solid fa-calendar-check text-gold"></i>
-            <span>แผนเดือนที่ต้องปิดงาน</span>
-          </div>
-          <div class="target-panel-body">
-            <div class="target-inputs">
-              <select id="targetMonthSelect" class="pea-select-sm">
-                <option value="มกราคม">มกราคม</option>
-                <option value="กุมภาพันธ์">กุมภาพันธ์</option>
-                <option value="มีนาคม">มีนาคม</option>
-                <option value="เมษายน">เมษายน</option>
-                <option value="พฤษภาคม">พฤษภาคม</option>
-                <option value="มิถุนายน">มิถุนายน</option>
-                <option value="กรกฎาคม">กรกฎาคม</option>
-                <option value="สิงหาคม">สิงหาคม</option>
-                <option value="กันยายน">กันยายน</option>
-                <option value="ตุลาคม">ตุลาคม</option>
-                <option value="พฤศจิกายน">พฤศจิกายน</option>
-                <option value="ธันวาคม">ธันวาคม</option>
-              </select>
-              <select id="targetYearSelect" class="pea-select-sm">
-                <option value="2567">2567</option>
-                <option value="2568">2568</option>
-                <option value="2569">2569</option>
-                <option value="2570">2570</option>
-                <option value="2571">2571</option>
-              </select>
-              <button id="btnSaveTargetMonth" class="btn btn-sm btn-purple" title="บันทึกแผนเดือนปิดงาน">
-                <i class="fa-solid fa-floppy-disk"></i> บันทึก
-              </button>
+        <!-- Hero Control Panels -->
+        <div style="display: flex; gap: 0.85rem; flex-wrap: wrap; align-items: stretch;">
+          <!-- Target Closing Month Control Box -->
+          <div class="target-closing-panel">
+            <div class="target-panel-header">
+              <i class="fa-solid fa-calendar-check text-gold"></i>
+              <span>แผนเดือนที่ต้องปิดงาน</span>
             </div>
-            <div class="target-status-badge" id="targetMonthStatus">
-              <i class="fa-solid fa-clock"></i> กำหนดเป้าหมาย: <span id="targetMonthDisplay">กันยายน 2569</span>
+            <div class="target-panel-body">
+              <div class="target-inputs">
+                <select id="targetMonthSelect" class="pea-select-sm">
+                  <option value="มกราคม">มกราคม</option>
+                  <option value="กุมภาพันธ์">กุมภาพันธ์</option>
+                  <option value="มีนาคม">มีนาคม</option>
+                  <option value="เมษายน">เมษายน</option>
+                  <option value="พฤษภาคม">พฤษภาคม</option>
+                  <option value="มิถุนายน">มิถุนายน</option>
+                  <option value="กรกฎาคม">กรกฎาคม</option>
+                  <option value="สิงหาคม">สิงหาคม</option>
+                  <option value="กันยายน">กันยายน</option>
+                  <option value="ตุลาคม">ตุลาคม</option>
+                  <option value="พฤศจิกายน">พฤศจิกายน</option>
+                  <option value="ธันวาคม">ธันวาคม</option>
+                </select>
+                <select id="targetYearSelect" class="pea-select-sm">
+                  <option value="2567">2567</option>
+                  <option value="2568">2568</option>
+                  <option value="2569">2569</option>
+                  <option value="2570">2570</option>
+                  <option value="2571">2571</option>
+                </select>
+                <button id="btnSaveTargetMonth" class="btn btn-sm btn-purple" title="บันทึกแผนเดือนปิดงาน">
+                  <i class="fa-solid fa-floppy-disk"></i> บันทึก
+                </button>
+              </div>
+              <div class="target-status-badge" id="targetMonthStatus">
+                <i class="fa-solid fa-clock"></i> กำหนดเป้าหมาย: <span id="targetMonthDisplay">กันยายน 2569</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Operational Closing Status Box (สถานะการดำเนินงานปิดงาน) -->
+          <div class="target-closing-panel status-control-panel">
+            <div class="target-panel-header">
+              <i class="fa-solid fa-tags text-purple"></i>
+              <span>สถานะการดำเนินงานปิดงาน</span>
+            </div>
+            <div class="target-panel-body">
+              <div class="target-inputs">
+                <select id="heroStatusSelect" class="pea-select-sm" style="flex: 1; max-width: 260px; font-weight: 500;">
+                  <option value="AUTO">-- อัตโนมัติ (ตามรายงาน SAP) --</option>
+                  <option value="STATUS_1">1. อยู่ระหว่างดำเนินการโอนงบประมาณ</option>
+                  <option value="STATUS_2">2. อยู่ระหว่างคืนพัสดุ</option>
+                  <option value="STATUS_3">3. อยู่ระหว่างดำเนินการโอนงบประมาณ และคืนพัสดุ</option>
+                  <option value="STATUS_4">4. ส่งเอกสารปิดงานแล้ว อยู่ระหว่างส่วนเกี่ยวข้องตรวจสอบ</option>
+                  <option value="STATUS_5">5. ปิดงานแล้ว CLSD F4</option>
+                </select>
+                <button id="btnSaveHeroStatus" class="btn btn-sm btn-purple" title="บันทึกสถานะปิดงาน">
+                  <i class="fa-solid fa-floppy-disk"></i> บันทึก
+                </button>
+              </div>
+              <div class="target-status-badge" id="heroStatusDisplayBadge" style="cursor: pointer;" onclick="if(currentProject) openChangeStatusModal(currentProject.id)" title="คลิกเพื่อเปิดหน้าต่างเลือกสถานะ">
+                <i class="fa-solid fa-tag text-purple"></i> สถานะ: <span id="heroStatusDisplayText">รอตรวจสอบ</span>
+              </div>
             </div>
           </div>
         </div>
@@ -270,11 +302,20 @@
           <input type="text" id="hubSearchInput" placeholder="ค้นหาตามรหัส WBS, ชื่อโครงการ, หรือผู้ควบคุมงาน...">
         </div>
         <div class="hub-filter-group">
-          <select id="hubStatusFilter" class="pea-select-sm">
+          <select id="hubStatusFilter" class="pea-select-sm" style="font-weight: 500;">
             <option value="ALL">สถานะทั้งหมด</option>
-            <option value="READY">พร้อมปิดงาน</option>
-            <option value="DEFICIT">ปิดงานไม่ได้ (งบติดลบ)</option>
-            <option value="WITHDRAW">มีพัสดุขาดเบิก</option>
+            <optgroup label="สถานะการดำเนินงานเพิ่มเติม">
+              <option value="STATUS_1">1. อยู่ระหว่างดำเนินการโอนงบประมาณ</option>
+              <option value="STATUS_2">2. อยู่ระหว่างคืนพัสดุ</option>
+              <option value="STATUS_3">3. อยู่ระหว่างดำเนินการโอนงบประมาณ และคืนพัสดุ</option>
+              <option value="STATUS_4">4. ส่งเอกสารปิดงานแล้ว อยู่ระหว่างส่วนเกี่ยวข้องตรวจสอบ</option>
+              <option value="STATUS_5">5. ปิดงานแล้ว CLSD F4</option>
+            </optgroup>
+            <optgroup label="เงื่อนไขมาตรฐาน SAP">
+              <option value="READY">พร้อมปิดงาน</option>
+              <option value="DEFICIT">ปิดงานไม่ได้ (งบติดลบ)</option>
+              <option value="WITHDRAW">มีพัสดุขาดเบิก</option>
+            </optgroup>
           </select>
           <div class="view-toggle-btns">
             <button id="btnViewCards" class="btn btn-xs btn-purple active" onclick="setProjectsViewMode('cards')" title="มุมมองการ์ด">
@@ -284,6 +325,36 @@
               <i class="fa-solid fa-table-list"></i> ตาราง
             </button>
           </div>
+        </div>
+      </div>
+
+      <!-- Quick Status Filter Pills Bar (กดแสดงสถานะเพิ่มเติม) -->
+      <div class="status-quick-filter-bar">
+        <div class="status-filter-title">
+          <i class="fa-solid fa-filter text-purple"></i> <strong>กดแสดงสถานะเพิ่มเติม:</strong>
+        </div>
+        <div class="status-pills-list">
+          <button type="button" class="status-pill-btn active" data-status="ALL" onclick="setStatusFilter('ALL')">
+            <span>ทั้งหมด</span> <span class="pill-count" id="countStatusAll">0</span>
+          </button>
+          <button type="button" class="status-pill-btn pill-status-1" data-status="STATUS_1" onclick="setStatusFilter('STATUS_1')">
+            <i class="fa-solid fa-money-bill-transfer"></i> <span>1. โอนงบประมาณ</span> <span class="pill-count" id="countStatus1">0</span>
+          </button>
+          <button type="button" class="status-pill-btn pill-status-2" data-status="STATUS_2" onclick="setStatusFilter('STATUS_2')">
+            <i class="fa-solid fa-boxes-packing"></i> <span>2. คืนพัสดุ</span> <span class="pill-count" id="countStatus2">0</span>
+          </button>
+          <button type="button" class="status-pill-btn pill-status-3" data-status="STATUS_3" onclick="setStatusFilter('STATUS_3')">
+            <i class="fa-solid fa-triangle-exclamation"></i> <span>3. โอนงบและคืนพัสดุ</span> <span class="pill-count" id="countStatus3">0</span>
+          </button>
+          <button type="button" class="status-pill-btn pill-status-4" data-status="STATUS_4" onclick="setStatusFilter('STATUS_4')">
+            <i class="fa-solid fa-file-circle-check"></i> <span>4. ส่งเอกสาร/รอตรวจสอบ</span> <span class="pill-count" id="countStatus4">0</span>
+          </button>
+          <button type="button" class="status-pill-btn pill-status-5" data-status="STATUS_5" onclick="setStatusFilter('STATUS_5')">
+            <i class="fa-solid fa-circle-check"></i> <span>5. ปิดงานแล้ว CLSD F4</span> <span class="pill-count" id="countStatus5">0</span>
+          </button>
+          <button type="button" class="status-pill-btn pill-status-ready" data-status="READY" onclick="setStatusFilter('READY')">
+            <i class="fa-solid fa-circle-check text-success"></i> <span>พร้อมปิดงาน</span> <span class="pill-count" id="countStatusReady">0</span>
+          </button>
         </div>
       </div>
 
@@ -981,6 +1052,97 @@
         <button class="btn btn-outline-dark" id="btnCancelEditProjectName">ยกเลิก</button>
         <button class="btn btn-purple" id="btnSaveProjectName">
           <i class="fa-solid fa-floppy-disk"></i> บันทึกการแก้ไข
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Change Project Status Modal (กำหนดสถานะการดำเนินงานปิดงาน) -->
+  <div class="pea-modal-backdrop" id="changeStatusModal">
+    <div class="pea-modal" style="max-width: 620px;">
+      <div class="modal-header">
+        <h3><i class="fa-solid fa-tags text-purple"></i> กำหนดสถานะการดำเนินงานปิดงาน (สถานะเพิ่มเติม)</h3>
+        <button class="modal-close-btn" onclick="closeChangeStatusModal()"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <div class="modal-body">
+        <div style="background: #f8f5ff; border: 1px solid #d8b4fe; border-radius: 8px; padding: 0.75rem 1rem; margin-bottom: 1rem;">
+          <div style="font-size: 0.82rem; color: #6b21a8; margin-bottom: 0.25rem;"><strong>โครงการที่เลือก:</strong></div>
+          <div style="display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap;">
+            <span class="pea-badge badge-wbs"><i class="fa-solid fa-hashtag"></i> <strong id="statusModalWbs">-</strong></span>
+            <span style="font-weight: 600; font-size: 0.92rem; color: #1e293b;" id="statusModalProjectName">-</span>
+          </div>
+        </div>
+
+        <p class="text-muted" style="font-size: 0.85rem; margin-bottom: 0.75rem;">
+          กดเลือกสถานะการดำเนินงานปิดงานของโครงการนี้ เพื่อติดตามความคืบหน้าและแสดงในทะเบียนโครงการ:
+        </p>
+
+        <div class="status-option-list">
+          <label class="status-option-card">
+            <input type="radio" name="projectStatusOption" value="STATUS_1">
+            <div class="status-option-content">
+              <div class="status-option-title text-info-blue">
+                <i class="fa-solid fa-money-bill-transfer"></i> 1. อยู่ระหว่างดำเนินการโอนงบประมาณ
+              </div>
+              <p class="status-option-desc">มีหมวดค่าใช้จ่ายหน้างานติดลบ ต้องโอนงบประมาณชดเชยก่อนปิดงาน</p>
+            </div>
+          </label>
+
+          <label class="status-option-card">
+            <input type="radio" name="projectStatusOption" value="STATUS_2">
+            <div class="status-option-content">
+              <div class="status-option-title text-warning-amber">
+                <i class="fa-solid fa-boxes-packing"></i> 2. อยู่ระหว่างคืนพัสดุ
+              </div>
+              <p class="status-option-desc">มีพัสดุเบิกเกิน / ไม่ได้ติดตั้ง ต้องส่งคืนคลังพัสดุให้ครบถ้วน</p>
+            </div>
+          </label>
+
+          <label class="status-option-card">
+            <input type="radio" name="projectStatusOption" value="STATUS_3">
+            <div class="status-option-content">
+              <div class="status-option-title text-danger-rose">
+                <i class="fa-solid fa-triangle-exclamation"></i> 3. อยู่ระหว่างดำเนินการโอนงบประมาณ และคืนพัสดุ
+              </div>
+              <p class="status-option-desc">มีทั้งงบประมาณหน้างานติดลบ และมีพัสดุค้างส่งคืนคลัง</p>
+            </div>
+          </label>
+
+          <label class="status-option-card">
+            <input type="radio" name="projectStatusOption" value="STATUS_4">
+            <div class="status-option-content">
+              <div class="status-option-title text-purple-accent">
+                <i class="fa-solid fa-file-circle-check"></i> 4. ส่งเอกสารปิดงานแล้ว อยู่ระหว่างส่วนเกี่ยวข้องตรวจสอบ
+              </div>
+              <p class="status-option-desc">ส่งแบบรายงานปิดงาน กส.3 และเอกสารประกอบให้คณะกรรมการ/แผนกที่เกี่ยวข้องตรวจสอบ</p>
+            </div>
+          </label>
+
+          <label class="status-option-card">
+            <input type="radio" name="projectStatusOption" value="STATUS_5">
+            <div class="status-option-content">
+              <div class="status-option-title text-success-emerald">
+                <i class="fa-solid fa-circle-check"></i> 5. ปิดงานแล้ว CLSD F4
+              </div>
+              <p class="status-option-desc">ผ่านการตรวจสอบครบถ้วน และดำเนินการปิดงาน (CLSD) ในระบบ SAP เรียบร้อยแล้ว</p>
+            </div>
+          </label>
+
+          <label class="status-option-card">
+            <input type="radio" name="projectStatusOption" value="AUTO">
+            <div class="status-option-content">
+              <div class="status-option-title text-muted">
+                <i class="fa-solid fa-wand-magic-sparkles"></i> อัตโนมัติ (ตรวจจับตามรายงาน SAP)
+              </div>
+              <p class="status-option-desc">ให้ระบบคำนวณสถานะอัตโนมัติตามยอดงบประมาณและพัสดุจริงในไฟล์ ZPSR018</p>
+            </div>
+          </label>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-outline-dark" onclick="closeChangeStatusModal()">ยกเลิก</button>
+        <button class="btn btn-purple" id="btnSaveProjectStatus" onclick="handleSaveProjectStatusModal()">
+          <i class="fa-solid fa-floppy-disk"></i> บันทึกสถานะ
         </button>
       </div>
     </div>
