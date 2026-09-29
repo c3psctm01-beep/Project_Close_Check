@@ -302,14 +302,16 @@ def parse_network_table(doc, project_id=None):
             site_act = sum(c["actual"] for c in site_cats)
             site_dif = sum(c["diff"] for c in site_cats)
 
+            # A network has deficit if total diff is negative OR any controlled site category is negative
             has_deficit = (tot_diff < 0) or (len(site_deficits) > 0)
             status_text = "DEFICIT" if has_deficit else "READY"
 
             notes = []
             if tot_diff < 0:
                 notes.append(f"งบรวมโครงข่ายติดลบ {tot_diff:,.2f} ฿")
-            for sd in site_deficits:
-                notes.append(f"หมวด {sd['name']} ติดลบ {sd['diff']:,.2f} ฿")
+            if site_deficits:
+                def_desc = ", ".join([f"{d['name']} ({d['diff']:,.2f} ฿)" for d in site_deficits])
+                notes.append(f"ค่าใช้จ่ายหน้างานติดลบ: {def_desc}")
             if not notes:
                 notes.append(f"งบคงเหลือ {tot_diff:,.2f} ฿ (พร้อมปิดงาน)")
 
@@ -400,6 +402,7 @@ def generate_smart_network_transfers(networks, is_omns=False):
             clean = raw_desc.replace("แผนก", "").replace("งาน", "").strip()
             if clean: return clean
         return f"โครงข่าย {net_no}"
+
 
     running_diffs = {}
     running_ests = {}

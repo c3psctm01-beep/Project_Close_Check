@@ -1234,6 +1234,7 @@ function renderNetworksTable() {
 
   const nets = currentProject.networks || [];
   const totalCount = nets.length;
+
   const readyCount = nets.filter(n => !n.has_deficit).length;
   const deficitCount = nets.filter(n => n.has_deficit).length;
 
@@ -1323,16 +1324,20 @@ function renderNetworksTable() {
   } else {
     displayNets.forEach(n => {
       const isDef = n.has_deficit;
-      const isTotNeg = n.total_diff < 0;
-      const isSiteNeg = n.site_diff < 0;
+      const isTotNeg = n.total_diff !== undefined && n.total_diff < 0;
+      const isSiteNeg = n.site_diff !== undefined && n.site_diff < 0;
 
       let problemHtml = '<span class="text-success"><i class="fa-solid fa-circle-check"></i> ปกติ (งบไม่เกิน)</span>';
-      if (n.site_deficits && n.site_deficits.length > 0) {
-        problemHtml = n.site_deficits.map(d => 
-          `<span class="badge-tag bg-danger font-weight-bold"><i class="fa-solid fa-triangle-exclamation"></i> ${d.name} (-${formatMoney(Math.abs(d.diff))} ฿)</span>`
-        ).join(" ");
-      } else if (isTotNeg) {
-        problemHtml = `<span class="badge-tag bg-danger font-weight-bold"><i class="fa-solid fa-triangle-exclamation"></i> ผลต่างรวมติดลบ (-${formatMoney(Math.abs(n.total_diff))} ฿)</span>`;
+      if (isDef) {
+        if (n.site_deficits && n.site_deficits.length > 0) {
+          problemHtml = n.site_deficits.map(d => 
+            `<span class="badge-tag bg-danger font-weight-bold"><i class="fa-solid fa-triangle-exclamation"></i> ${d.name} (-${formatMoney(Math.abs(d.diff))} ฿)</span>`
+          ).join(" ");
+        } else if (isTotNeg) {
+          problemHtml = `<span class="badge-tag bg-danger font-weight-bold"><i class="fa-solid fa-triangle-exclamation"></i> ผลต่างรวมติดลบ (-${formatMoney(Math.abs(n.total_diff))} ฿)</span>`;
+        } else if (isSiteNeg) {
+          problemHtml = `<span class="badge-tag bg-danger font-weight-bold"><i class="fa-solid fa-triangle-exclamation"></i> งบหน้างานติดลบ (-${formatMoney(Math.abs(n.site_diff))} ฿)</span>`;
+        }
       }
 
       const tr = document.createElement("tr");
